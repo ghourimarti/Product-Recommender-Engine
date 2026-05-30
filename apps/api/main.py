@@ -26,11 +26,13 @@ from core.config import get_settings
 from core.embeddings import get_dense_embeddings
 from core.history import DynamoChatHistory
 from core.llm import astream_explanation, build_chat_model, rewrite_query
-from core.models import ChatRequest, RankingResult, RecommendRequest
+from core.models import ChatRequest, Product, RankingResult, RecommendRequest
 from core.observability import configure_observability, get_langchain_callbacks
 from core.ratelimit import RateLimiter, RateLimitExceeded
+from core.resilience import CircuitBreaker
 from core.security import redact_pii
-from recommender.cached import cached_recommend
+from recommender.resilient import resilient_recommend
+from retrieval.index import load_catalog
 from retrieval.semantic_cache import SemanticCache
 from retrieval.store import QdrantHybridStore
 
@@ -82,6 +84,16 @@ def _rate_limiter() -> RateLimiter:
 @lru_cache
 def _callbacks() -> tuple[Any, ...]:
     return tuple(get_langchain_callbacks())
+
+
+@lru_cache
+def _catalog() -> list[Product]:
+    return load_catalog()
+
+
+@lru_cache
+def _breaker() -> CircuitBreaker:
+    return CircuitBreaker()
 
 
 def require_user(authorization: str | None = Header(default=None)) -> str:
@@ -141,8 +153,15 @@ def recommend_endpoint(
 ) -> RankingResult:
     """Sync, ranking-only path (no LLM) — the fast, 4-layer-cached recommendation list."""
     logger.info("recommend user=%s query=%s", user_id, redact_pii(req.query))  # PII-safe log
-    return cached_recommend(
-        req.query, _store(), _cache(), _semantic_cache(), _embeddings(), k=req.k
+    return resilient_recommend(
+        req.query,
+        _store(),
+        _cache(),
+        _semantic_cache(),
+        _embeddings(),
+        _catalog(),
+        k=req.k,
+        breaker=_breaker(),
     )
 
 
@@ -164,8 +183,15 @@ async def chat_endpoint(
             else req.query
         )
 
-        result = cached_recommend(
-            standalone, _store(), _cache(), _semantic_cache(), _embeddings(), k=req.k
+        result = resilient_recommend(
+            standalone,
+            _store(),
+            _cache(),
+            _semantic_cache(),
+            _embeddings(),
+            _catalog(),
+            k=req.k,
+            breaker=_breaker(),
         )
         yield _sse("recommendations", result.model_dump())
         if result.no_match or not result.products:
@@ -177,9 +203,18 @@ async def chat_endpoint(
             return
 
         tokens: list[str] = []
-        async for token in astream_explanation(standalone, result.products, model, callbacks):
-            tokens.append(token)
-            yield _sse("token", {"text": token})
+        try:
+            async for token in astream_explanation(standalone, result.products, model, callbacks):
+                tokens.append(token)
+                yield _sse("token", {"text": token})
+        except Exception:  # all LLM providers failed -> static template (Decision 21)
+            logger.warning("explanation generation failed; serving template", exc_info=True)
+            yield _sse(
+                "token",
+                {"text": "Showing your top matches; explanations are temporarily unavailable."},
+            )
+            yield _sse("done", {"no_match": False, "degraded": True})
+            return
         yield _sse("done", {"no_match": False})
 
         _history().add_message(user_id, req.session_id, "human", req.query)

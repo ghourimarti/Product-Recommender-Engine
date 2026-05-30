@@ -9,6 +9,7 @@ Invalidation: bump ``catalog:version`` -> all version-tagged keys miss.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import time
@@ -69,22 +70,33 @@ class RedisCache:
     def __init__(self, client: Any) -> None:
         self._client = client
 
+    # Cache ops degrade gracefully (Decision 21): Redis failures must never break a request.
     def get(self, key: str) -> str | None:
-        value = self._client.get(key)
+        try:
+            value = self._client.get(key)
+        except Exception:
+            return None
         return None if value is None else str(value)
 
     def set(self, key: str, value: str, ttl_seconds: int | None = None) -> None:
-        self._client.set(key, value, ex=ttl_seconds)
+        with contextlib.suppress(Exception):  # cache writes must never break a request
+            self._client.set(key, value, ex=ttl_seconds)
 
     def incr(self, key: str) -> int:
-        return int(self._client.incr(key))
+        try:
+            return int(self._client.incr(key))
+        except Exception:
+            return 0
 
     def incr_window(self, key: str, ttl_seconds: int) -> int:
-        """Increment a fixed-window counter, setting its TTL on first use (rate limiting)."""
-        value = int(self._client.incr(key))
-        if value == 1:
-            self._client.expire(key, ttl_seconds)
-        return value
+        """Fixed-window counter; on Redis failure returns 0 (rate limiting fails open)."""
+        try:
+            value = int(self._client.incr(key))
+            if value == 1:
+                self._client.expire(key, ttl_seconds)
+            return value
+        except Exception:
+            return 0
 
     def get_json(self, key: str) -> Any | None:
         raw = self.get(key)

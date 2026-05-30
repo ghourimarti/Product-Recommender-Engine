@@ -191,6 +191,15 @@ uv run pytest -q tests/integration/test_killswitch.py   # LLM_ENABLED=false -> c
 - **Kill-switch:** set `LLM_ENABLED=false` in `.env` -> `/chat` returns recommendation cards +
   a `degraded` done event, **no** token stream (LLM fully bypassed). `/recommend` unaffected.
 
+### Step 13 — Failure-mode degradation (circuit breakers)  *(pure chaos tests; no services)*
+```bash
+uv run pytest -q tests/unit/test_resilience.py
+```
+Covers (Decision 21): circuit breaker open/half-open; **Qdrant down → popularity-only ranking**
+(rating×volume, no vector); **Redis down → cache miss/no-op + rate limiter fails open**. The
+API uses `resilient_recommend` (breaker → popularity fallback) on both endpoints, and `/chat`
+falls back to a static template if all LLM providers fail.
+
 ---
 
 ## Full regression sweep — verify ALL steps at once
