@@ -18,6 +18,7 @@ dependencies = [
     "boto3>=1.35",
     "prometheus-client>=0.20",
     "redis>=5.0",
+    "pyjwt[crypto]>=2.9",
 ]
 # NOTE: RAGAS was the Decision-19 choice but every ragas release hard-imports
 # langchain_community.chat_models.vertexai (removed in langchain-community for
@@ -90,5 +91,6 @@ module = [
     "botocore.*",
     "redis.*",
     "fakeredis.*",
+    "jwt.*",
 ]
 ignore_missing_imports = true

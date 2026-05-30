@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     # Cache + queue broker: Redis (Decisions 10, 11).
     redis_url: str = "redis://localhost:6379/0"
 
+    # Auth (Decision 9). With clerk_jwks_url set -> verify Clerk RS256 tokens; else dev HS256.
+    clerk_jwks_url: str = ""
+    auth_dev_secret: str = "dev-secret-change-me"
+    rate_limit_per_minute: int = 30
+    rate_limit_per_day: int = 500
+
 
 @lru_cache
 def get_settings() -> Settings:

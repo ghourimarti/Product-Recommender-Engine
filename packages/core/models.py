@@ -122,9 +122,11 @@ class RecommendRequest(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    """POST /chat body — SSE streamed grounded recommendations with per-user history."""
+    """POST /chat body — SSE streamed grounded recommendations with per-user history.
+
+    user_id is NOT taken from the body; it is the authenticated JWT subject (Decision 9).
+    """
 
     query: str
     session_id: str = "default"
-    user_id: str = "anonymous"  # replaced by the authenticated subject in Step 10
     k: int = Field(default=5, ge=1, le=20)

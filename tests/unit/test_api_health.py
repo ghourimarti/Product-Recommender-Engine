@@ -20,3 +20,9 @@ def test_metrics_counts_requests() -> None:
     response = client.get("/metrics")
     assert response.status_code == 200
     assert "http_requests_total" in response.text  # real request counter (fixes demo's bug)
+
+
+def test_recommend_requires_auth() -> None:
+    # No bearer token -> rejected before any external service is touched (Decision 9).
+    response = client.post("/recommend", json={"query": "x", "k": 3})
+    assert response.status_code == 401

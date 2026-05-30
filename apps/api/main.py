@@ -13,17 +13,19 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from functools import lru_cache
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from starlette.requests import Request
 from starlette.responses import Response
 
+from core.auth import AuthError, user_id_from_token
 from core.cache import RedisCache, make_redis
 from core.embeddings import get_dense_embeddings
 from core.history import DynamoChatHistory
 from core.llm import astream_explanation, build_chat_model, rewrite_query
 from core.models import ChatRequest, RankingResult, RecommendRequest
+from core.ratelimit import RateLimiter, RateLimitExceeded
 from recommender.cached import cached_recommend
 from retrieval.semantic_cache import SemanticCache
 from retrieval.store import QdrantHybridStore
@@ -66,6 +68,34 @@ def _embeddings() -> Any:
     return get_dense_embeddings()
 
 
+@lru_cache
+def _rate_limiter() -> RateLimiter:
+    return RateLimiter.from_settings(_cache())
+
+
+def require_user(authorization: str | None = Header(default=None)) -> str:
+    """Authenticated user id from the Bearer JWT (Decision 9)."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="missing bearer token")
+    try:
+        return user_id_from_token(authorization.split(" ", 1)[1])
+    except AuthError as exc:
+        raise HTTPException(status_code=401, detail="invalid token") from exc
+
+
+def rate_limited_user(user_id: str = Depends(require_user)) -> str:
+    """Authenticated user id, after enforcing the per-user rate limit (Decisions 9, 20)."""
+    try:
+        _rate_limiter().check(user_id)
+    except RateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=429,
+            detail="rate limit exceeded",
+            headers={"Retry-After": str(exc.retry_after)},
+        ) from exc
+    return user_id
+
+
 def _sse(event: str, data: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
@@ -95,7 +125,9 @@ def metrics() -> Response:
 
 
 @app.post("/recommend")
-def recommend_endpoint(req: RecommendRequest) -> RankingResult:
+def recommend_endpoint(
+    req: RecommendRequest, user_id: str = Depends(rate_limited_user)
+) -> RankingResult:
     """Sync, ranking-only path (no LLM) — the fast, 4-layer-cached recommendation list."""
     return cached_recommend(
         req.query, _store(), _cache(), _semantic_cache(), _embeddings(), k=req.k
@@ -103,12 +135,14 @@ def recommend_endpoint(req: RecommendRequest) -> RankingResult:
 
 
 @app.post("/chat")
-async def chat_endpoint(req: ChatRequest) -> StreamingResponse:
+async def chat_endpoint(
+    req: ChatRequest, user_id: str = Depends(rate_limited_user)
+) -> StreamingResponse:
     """SSE: emit recommendation cards, then stream the grounded explanation; persist history."""
 
     async def event_stream() -> AsyncIterator[str]:
         model = _model()
-        history = _history().get_messages(req.user_id, req.session_id)
+        history = _history().get_messages(user_id, req.session_id)
         standalone = rewrite_query(req.query, history, model) if history else req.query
 
         result = cached_recommend(
@@ -125,7 +159,7 @@ async def chat_endpoint(req: ChatRequest) -> StreamingResponse:
             yield _sse("token", {"text": token})
         yield _sse("done", {"no_match": False})
 
-        _history().add_message(req.user_id, req.session_id, "human", req.query)
-        _history().add_message(req.user_id, req.session_id, "ai", "".join(tokens))
+        _history().add_message(user_id, req.session_id, "human", req.query)
+        _history().add_message(user_id, req.session_id, "ai", "".join(tokens))
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

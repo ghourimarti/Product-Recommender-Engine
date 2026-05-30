@@ -79,6 +79,13 @@ class RedisCache:
     def incr(self, key: str) -> int:
         return int(self._client.incr(key))
 
+    def incr_window(self, key: str, ttl_seconds: int) -> int:
+        """Increment a fixed-window counter, setting its TTL on first use (rate limiting)."""
+        value = int(self._client.incr(key))
+        if value == 1:
+            self._client.expire(key, ttl_seconds)
+        return value
+
     def get_json(self, key: str) -> Any | None:
         raw = self.get(key)
         return json.loads(raw) if raw else None

@@ -154,6 +154,21 @@ Layers: L0 in-proc version memo · L1 Redis embedding cache · L2 Qdrant semanti
 (near-duplicate queries) · L3 Redis exact response cache. Bumping `catalog:version` invalidates
 L2/L3.
 
+### Step 10 — Auth (JWT) + rate limiting  *(needs Docker: Redis; + Qdrant/keys for happy path)*
+```bash
+uv run pytest -q tests/unit/test_auth.py tests/unit/test_ratelimit.py
+uv run pytest -q tests/unit/test_api_health.py::test_recommend_requires_auth   # 401 without token
+```
+Live (mint a dev token; works because CLERK_JWKS_URL is unset -> HS256 dev mode):
+```powershell
+make serve   # in another shell
+$tok = uv run python -c "from core.auth import mint_dev_token; print(mint_dev_token('alice'))"
+curl http://localhost:8080/recommend -X POST -H "Content-Type: application/json" -d "{\"query\":\"bass\",\"k\":2}"            # 401 (no token)
+curl http://localhost:8080/recommend -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" -d "{\"query\":\"bass\",\"k\":2}"   # 200
+```
+With a real Clerk instance, set `CLERK_JWKS_URL` in `.env` and send Clerk-issued tokens instead.
+Rate limit: 30/min + 500/day per user -> 429 with `Retry-After`.
+
 ---
 
 ## Full regression sweep — verify ALL steps at once

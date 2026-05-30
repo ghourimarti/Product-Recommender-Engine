@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
+from core.auth import mint_dev_token
 from core.config import get_settings
 from core.llm import available_providers
 from retrieval.index import load_catalog
@@ -31,18 +32,28 @@ def _reachable(port: int) -> bool:
         sock.close()
 
 
+def _auth() -> dict[str, str]:
+    return {"Authorization": f"Bearer {mint_dev_token('tester')}"}
+
+
 @pytest.fixture(scope="module")
 def client() -> TestClient:
     if not _reachable(6333):
         pytest.skip("Qdrant not reachable on localhost:6333")
+    if not _reachable(6379):
+        pytest.skip("Redis not reachable (rate limiter)")
     if not get_settings().openai_api_key:
         pytest.skip("OPENAI_API_KEY not set (embeddings)")
+    if get_settings().clerk_jwks_url:
+        pytest.skip("Clerk JWKS configured; dev tokens not valid")
     QdrantHybridStore().index(load_catalog())  # ensure the collection exists for the API
     return TestClient(app)
 
 
 def test_recommend_endpoint(client: TestClient) -> None:
-    response = client.post("/recommend", json={"query": "good bass headphones", "k": 3})
+    response = client.post(
+        "/recommend", json={"query": "good bass headphones", "k": 3}, headers=_auth()
+    )
     assert response.status_code == 200
     body = response.json()
     assert len(body["products"]) >= 1
@@ -57,7 +68,8 @@ def test_chat_sse_stream(client: TestClient) -> None:
         pytest.skip("DynamoDB-local not reachable on localhost:8000")
     response = client.post(
         "/chat",
-        json={"query": "good bass headphones", "session_id": "t", "user_id": "tester", "k": 3},
+        json={"query": "good bass headphones", "session_id": "t", "k": 3},
+        headers=_auth(),
     )
     assert response.status_code == 200
     text = response.text
