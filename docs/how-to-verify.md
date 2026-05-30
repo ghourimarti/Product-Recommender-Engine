@@ -200,6 +200,27 @@ Covers (Decision 21): circuit breaker open/half-open; **Qdrant down → populari
 API uses `resilient_recommend` (breaker → popularity fallback) on both endpoints, and `/chat`
 falls back to a static template if all LLM providers fail.
 
+### Step 14 — Next.js frontend (cards-first streaming)  *(Node/npm; browser for the visual check)*
+```bash
+cd apps/web
+npm install
+# NOTE: this repo path contains "&" which breaks npm's .cmd shims on Windows -> invoke binaries
+# via node directly (on a path without "&", plain `npm run typecheck` / `npm run build` work):
+node node_modules/typescript/bin/tsc --noEmit       # type-check -> no errors
+node node_modules/next/dist/bin/next build          # -> "Compiled successfully"
+```
+Run + verify visually:
+```bash
+# 1) API up:  make serve   (repo root)
+# 2) apps/web/.env.local:
+#      NEXT_PUBLIC_API_URL=http://localhost:8080
+#      NEXT_PUBLIC_DEV_TOKEN=<from: uv run python -c "from core.auth import mint_dev_token; print(mint_dev_token('web'))">
+# 3) start UI:  cd apps/web ; node node_modules/next/dist/bin/next dev   # http://localhost:3000
+```
+In the browser: enter "good bass earphones for the gym" -> cards appear first, then the
+explanation streams token-by-token; "Stop" cancels. Dev token locally; Clerk is the production
+auth layer.
+
 ---
 
 ## Full regression sweep — verify ALL steps at once
