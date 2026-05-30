@@ -71,11 +71,11 @@ git branch -M main
 git remote remove origin 2>/dev/null
 
 # 8. Add Account 1 as origin fetch URL
-git remote add origin git@github-account1:ghourimarti/P1-Video-SEO-Engine.git
+git remote add origin git@github-account1:ghourimarti/P2-Product-Recommender-Engine.git
 
 # 9. Add both GitHub accounts as push URLs
-git remote set-url --add --push origin git@github-account1:ghourimarti/P1-Video-SEO-Engine.git
-git remote set-url --add --push origin git@github-account2:ghourimartin/P1-Video-SEO-Engine.git
+git remote set-url --add --push origin git@github-account1:ghourimarti/P2-Product-Recommender-Engine.git
+git remote set-url --add --push origin git@github-account2:ghourimartin/P2-Product-Recommender-Engine.git
 
 # 10. Push to both GitHub accounts
 git push -u origin main --force
