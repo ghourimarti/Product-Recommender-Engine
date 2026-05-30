@@ -14,6 +14,10 @@ dependencies = [
     "qdrant-client>=1.12,<1.13",  # pinned to match the v1.12.4 server image
     "fastembed>=0.4",
 ]
+# NOTE: RAGAS was the Decision-19 choice but every ragas release hard-imports
+# langchain_community.chat_models.vertexai (removed in langchain-community for
+# langchain-core>=0.3, which our LLM stack requires) -> unresolvable conflict.
+# Step 7 uses an equivalent custom LLM-judge harness (same metrics) instead.
 
 [build-system]
 requires = ["hatchling"]

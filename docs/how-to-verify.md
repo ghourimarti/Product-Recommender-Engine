@@ -111,6 +111,17 @@ The LLM provider is chosen from your `.env` keys in priority **Groq → OpenAI �
 (Decision 4). Reasons are grounded in real reviews; the LLM only writes reasons, never
 product facts.
 
+### Step 7 — Answer-quality eval (custom LLM judge)  *(needs OPENAI_API_KEY + Docker)*
+```bash
+docker compose -f infra/compose/docker-compose.yml up -d   # Qdrant
+uv run python -m evaluation.ragas.run                      # make eval-rag -> docs/answer-quality-baseline.md
+uv run pytest -q tests/unit/test_ragas_format.py           # format/judge-schema (4 tests)
+```
+Expect ≈ **answer_relevancy 0.94 / faithfulness 0.56 / context_precision 0.65**. Faithfulness
+is the weak metric (documented improvement target). Note: the RAGAS *library* is unusable in
+this stack (it hard-imports a removed `langchain_community.chat_models.vertexai`), so this is an
+equivalent custom LLM-judge harness — see the baseline file's methodology section.
+
 ---
 
 ## Quick "is everything healthy?" sweep
