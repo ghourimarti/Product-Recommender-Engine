@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     dynamodb_endpoint: str = "http://localhost:8000"
     dynamodb_table: str = "p2-recommender"
 
+    # Cache + queue broker: Redis (Decisions 10, 11).
+    redis_url: str = "redis://localhost:6379/0"
+
 
 @lru_cache
 def get_settings() -> Settings:

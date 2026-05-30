@@ -19,10 +19,13 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 from starlette.requests import Request
 from starlette.responses import Response
 
+from core.cache import RedisCache, make_redis
+from core.embeddings import get_dense_embeddings
 from core.history import DynamoChatHistory
 from core.llm import astream_explanation, build_chat_model, rewrite_query
 from core.models import ChatRequest, RankingResult, RecommendRequest
-from recommender.service import recommend
+from recommender.cached import cached_recommend
+from retrieval.semantic_cache import SemanticCache
 from retrieval.store import QdrantHybridStore
 
 REQUESTS = Counter("http_requests_total", "Total HTTP requests", ["method", "path", "status"])
@@ -44,6 +47,23 @@ def _history() -> DynamoChatHistory:
 @lru_cache
 def _model() -> Any:
     return build_chat_model()
+
+
+@lru_cache
+def _cache() -> RedisCache:
+    return RedisCache(make_redis())
+
+
+@lru_cache
+def _semantic_cache() -> SemanticCache:
+    sc = SemanticCache()
+    sc.ensure_collection()
+    return sc
+
+
+@lru_cache
+def _embeddings() -> Any:
+    return get_dense_embeddings()
 
 
 def _sse(event: str, data: dict[str, Any]) -> str:
@@ -76,8 +96,10 @@ def metrics() -> Response:
 
 @app.post("/recommend")
 def recommend_endpoint(req: RecommendRequest) -> RankingResult:
-    """Sync, ranking-only path (no LLM) — the fast recommendation list."""
-    return recommend(req.query, _store(), k=req.k)
+    """Sync, ranking-only path (no LLM) — the fast, 4-layer-cached recommendation list."""
+    return cached_recommend(
+        req.query, _store(), _cache(), _semantic_cache(), _embeddings(), k=req.k
+    )
 
 
 @app.post("/chat")
@@ -89,7 +111,9 @@ async def chat_endpoint(req: ChatRequest) -> StreamingResponse:
         history = _history().get_messages(req.user_id, req.session_id)
         standalone = rewrite_query(req.query, history, model) if history else req.query
 
-        result = recommend(standalone, _store(), k=req.k)
+        result = cached_recommend(
+            standalone, _store(), _cache(), _semantic_cache(), _embeddings(), k=req.k
+        )
         yield _sse("recommendations", result.model_dump())
         if result.no_match or not result.products:
             yield _sse("done", {"no_match": True})

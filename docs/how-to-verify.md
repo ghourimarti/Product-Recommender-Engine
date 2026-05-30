@@ -140,6 +140,20 @@ curl -N -X POST http://localhost:8080/chat -H "Content-Type: application/json" -
 curl http://localhost:8080/metrics | findstr http_requests_total
 ```
 
+### Step 9 — 4-layer caching  *(needs Docker: Qdrant + Redis)*
+```bash
+docker compose -f infra/compose/docker-compose.yml up -d   # Qdrant + Redis + DynamoDB-local
+uv run pytest -q tests/unit/test_cache.py tests/integration/test_cache_integration.py
+```
+Live: call `/recommend` twice with the same query — the 2nd is served from cache. Confirm via
+metrics:
+```bash
+curl http://localhost:8080/metrics | findstr cache_hits_total
+```
+Layers: L0 in-proc version memo · L1 Redis embedding cache · L2 Qdrant semantic cache
+(near-duplicate queries) · L3 Redis exact response cache. Bumping `catalog:version` invalidates
+L2/L3.
+
 ---
 
 ## Full regression sweep — verify ALL steps at once
