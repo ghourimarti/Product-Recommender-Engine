@@ -1,0 +1,98 @@
+[
+  {
+    "query": "boat headphones",
+    "relevant_ids": ["ACCEVQZABYWJHRHF", "ACCFSDGXX3S6DVBG", "ACCFZGAQJGYCYDCM"],
+    "tier": "attribute",
+    "rationale": "All three BoAt products (BassHeads, Airdopes 131, Rockerz 235v2)."
+  },
+  {
+    "query": "realme earphones",
+    "relevant_ids": ["ACCFHGZFS7GB9CVM", "ACCFKYE2ARGG67WC", "ACCFVWN4PGNTEFGY"],
+    "tier": "attribute",
+    "rationale": "All three realme products (Buds Wireless, Buds 2, Buds Q)."
+  },
+  {
+    "query": "oneplus earphones",
+    "relevant_ids": ["ACCFR3Q77R6RRGAC", "ACCFVA3KZ2EYMYX3"],
+    "tier": "attribute",
+    "rationale": "Both OnePlus Bullets Wireless Z variants."
+  },
+  {
+    "query": "wired earphones with a cable",
+    "relevant_ids": ["ACCEVQZABYWJHRHF", "ACCFKYE2ARGG67WC"],
+    "tier": "attribute",
+    "rationale": "Only wired products: BoAt BassHeads 100 Wired, realme Buds 2 Wired."
+  },
+  {
+    "query": "true wireless tws earbuds",
+    "relevant_ids": ["ACCFSDGXX3S6DVBG", "ACCFVWN4PGNTEFGY"],
+    "tier": "attribute",
+    "rationale": "True-wireless (separate buds): BoAt Airdopes 131, realme Buds Q."
+  },
+  {
+    "query": "bluetooth neckband",
+    "relevant_ids": ["ACCFHGZFS7GB9CVM", "ACCFR3Q77R6RRGAC", "ACCFVA3KZ2EYMYX3", "ACCFSKBJYWZKXGCP", "ACCFZGAQJGYCYDCM"],
+    "tier": "attribute",
+    "rationale": "Around-neck wireless: realme Buds Wireless, both OnePlus Bullets Z, U&I Titanic, BoAt Rockerz."
+  },
+  {
+    "query": "boat wireless earbuds",
+    "relevant_ids": ["ACCFSDGXX3S6DVBG", "ACCFZGAQJGYCYDCM"],
+    "tier": "attribute",
+    "rationale": "BoAt wireless models: Airdopes 131 (TWS), Rockerz 235v2 (neckband)."
+  },
+  {
+    "query": "realme wireless bluetooth earphones",
+    "relevant_ids": ["ACCFHGZFS7GB9CVM", "ACCFVWN4PGNTEFGY"],
+    "tier": "attribute",
+    "rationale": "realme wireless: Buds Wireless (neckband), Buds Q (TWS)."
+  },
+  {
+    "query": "oneplus neckband",
+    "relevant_ids": ["ACCFR3Q77R6RRGAC", "ACCFVA3KZ2EYMYX3"],
+    "tier": "attribute",
+    "rationale": "Both OnePlus Bullets Wireless Z neckbands."
+  },
+  {
+    "query": "cheap wired earphones",
+    "relevant_ids": ["ACCEVQZABYWJHRHF", "ACCFKYE2ARGG67WC"],
+    "tier": "attribute",
+    "rationale": "Wired models are the budget options here: BoAt BassHeads, realme Buds 2."
+  },
+  {
+    "query": "boat rockerz",
+    "relevant_ids": ["ACCFZGAQJGYCYDCM"],
+    "tier": "attribute",
+    "rationale": "Exact product: BoAt Rockerz 235v2."
+  },
+  {
+    "query": "realme buds q",
+    "relevant_ids": ["ACCFVWN4PGNTEFGY"],
+    "tier": "attribute",
+    "rationale": "Exact product: realme Buds Q."
+  },
+  {
+    "query": "u&i titanic neckband",
+    "relevant_ids": ["ACCFSKBJYWZKXGCP"],
+    "tier": "attribute",
+    "rationale": "Exact product: U&I Titanic Series neckband."
+  },
+  {
+    "query": "earphones with the best bass",
+    "relevant_ids": ["ACCEVQZABYWJHRHF", "ACCFVA3KZ2EYMYX3", "ACCFZGAQJGYCYDCM"],
+    "tier": "semantic",
+    "rationale": "Bass-branded/known-bassy: BoAt BassHeads, OnePlus Bullets Z Bass Edition, BoAt Rockerz."
+  },
+  {
+    "query": "extra deep bass headphones",
+    "relevant_ids": ["ACCEVQZABYWJHRHF", "ACCFVA3KZ2EYMYX3"],
+    "tier": "semantic",
+    "rationale": "Products with 'Bass' explicitly in the name."
+  },
+  {
+    "query": "low price budget bluetooth headset",
+    "relevant_ids": ["ACCFSKBJYWZKXGCP"],
+    "tier": "semantic",
+    "rationale": "U&I Titanic is explicitly the 'Low Price' bluetooth model."
+  }
+]

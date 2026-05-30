@@ -8,20 +8,20 @@
 |---|---|
 | faithfulness | 0.5625 |
 | answer_relevancy | 0.9375 |
-| context_precision | 0.625 |
+| context_precision | 0.675 |
 
 ## Per-query
 
 | query | faithfulness | answer_relevancy | context_precision |
 |---|---|---|---|
 | headphones with the best bass | 0.50 | 1.00 | 0.67 |
-| wireless earbuds with long battery life | 1.00 | 1.00 | 0.67 |
+| wireless earbuds with long battery life | 1.00 | 1.00 | 0.90 |
 | earphones that are good for taking calls | 0.50 | 1.00 | 0.67 |
 | budget bluetooth headphones under a tigh | 0.50 | 1.00 | 0.67 |
-| boat headphones for listening to music | 0.50 | 1.00 | 0.67 |
-| wired earphones with good sound quality | 0.50 | 1.00 | 0.50 |
+| boat headphones for listening to music | 0.50 | 1.00 | 0.50 |
+| wired earphones with good sound quality | 0.50 | 1.00 | 0.67 |
 | a bluetooth neckband for workouts at the | 0.50 | 1.00 | 0.67 |
-| earbuds for gaming with low latency | 0.50 | 0.50 | 0.50 |
+| earbuds for gaming with low latency | 0.50 | 0.50 | 0.67 |
 
 ## Methodology & honest caveats
 

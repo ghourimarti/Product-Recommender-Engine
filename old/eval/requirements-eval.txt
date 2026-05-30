@@ -1,3 +1,0 @@
-# Eval-only deps (heavy; install in the Python 3.12 venv alongside backend/requirements.txt).
-ragas~=0.2.0
-datasets~=3.2

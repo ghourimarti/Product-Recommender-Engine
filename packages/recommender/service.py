@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from core.models import RankingResult
 from recommender.ranking import RankingConfig, rank_products
+from retrieval.rerank import Reranker
 from retrieval.store import VectorStore
 
 
@@ -16,7 +17,10 @@ def recommend(
     store: VectorStore,
     k: int = 5,
     config: RankingConfig | None = None,
+    reranker: Reranker | None = None,
 ) -> RankingResult:
-    """Retrieve ``k`` candidates for ``query`` and return rating-aware ranked recommendations."""
+    """Retrieve ``k`` candidates, optionally rerank, then rating-aware rank them."""
     candidates = store.search(query, k=k)
+    if reranker is not None:
+        candidates = reranker.rerank(query, candidates)
     return rank_products(candidates, config)

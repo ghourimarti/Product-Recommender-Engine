@@ -1,6 +1,0 @@
-fastapi~=0.115
-uvicorn[standard]~=0.34
-pydantic~=2.10
-fastembed~=0.5   # ONNX bge embeddings (CPU, no torch)
-httpx~=0.28      # tests
-pytest~=8.3
