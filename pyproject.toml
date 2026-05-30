@@ -1,0 +1,75 @@
+[project]
+name = "p2-recommender"
+version = "0.1.0"
+description = "Conversational, rating-aware product recommender (Enterprise2)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pydantic>=2.9",
+    "pydantic-settings>=2.5",
+    "langchain-core>=0.3",
+    "langchain-openai>=0.2",
+    "langchain-qdrant>=0.2",
+    "qdrant-client>=1.12,<1.13",  # pinned to match the v1.12.4 server image
+    "fastembed>=0.4",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Monorepo: each packages/<name> is installed editable as a top-level import.
+[tool.hatch.build.targets.wheel]
+packages = [
+    "packages/core",
+    "packages/retrieval",
+    "packages/recommender",
+    "packages/evaluation",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["packages", "apps", "tests"]
+# Reference/archive/source-doc dirs are not part of this build and must not be linted.
+extend-exclude = ["demo", "old", "Prompts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "packages"
+
+[tool.pytest.ini_options]
+pythonpath = ["packages", "apps"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "integration: requires external services (Qdrant) and API keys",
+]
+filterwarnings = [
+    # Local Qdrant runs over http; this warning is expected in dev (prod uses https).
+    "ignore:Api key is used with an insecure connection.:UserWarning",
+]
+
+# Third-party libs without complete type stubs — keep our own code strict.
+[[tool.mypy.overrides]]
+module = [
+    "langchain_core.*",
+    "langchain_openai.*",
+    "langchain_qdrant.*",
+    "qdrant_client.*",
+    "fastembed.*",
+]
+ignore_missing_imports = true
