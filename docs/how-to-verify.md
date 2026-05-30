@@ -221,6 +221,20 @@ In the browser: enter "good bass earphones for the gym" -> cards appear first, t
 explanation streams token-by-token; "Stop" cancels. Dev token locally; Clerk is the production
 auth layer.
 
+### Step 15 — Dockerize + compose parity  *(Docker)*
+```bash
+docker compose -f infra/compose/docker-compose.yml config     # validate full stack (6 services)
+docker build -f apps/api/Dockerfile -t p2-api .               # multi-stage, non-root API image
+docker run --rm -p 8080:8080 p2-api                           # curl http://localhost:8080/health -> {"status":"ok"}
+```
+Whole stack in one command (needs `.env` with API keys at repo root):
+```bash
+docker compose -f infra/compose/docker-compose.yml up -d --build
+# api :8080 · web :3000 · qdrant :6333 · redis :6379 · dynamodb :8000 · jaeger :16686
+```
+Images run as non-root (uid 10001). Note: the API image is ~725MB (fastembed/onnxruntime +
+langchain) — slimming is a hardening item (Phase 5).
+
 ---
 
 ## Full regression sweep — verify ALL steps at once

@@ -37,5 +37,36 @@ services:
       - "16686:16686"  # Jaeger UI
       - "4317:4317"    # OTLP gRPC receiver
 
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    container_name: p2-api
+    env_file:
+      - ../../.env          # API keys (OpenAI/Groq/etc.)
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      REDIS_URL: redis://redis:6379/0
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+    ports:
+      - "8080:8080"
+    depends_on:
+      - qdrant
+      - redis
+      - dynamodb
+
+  web:
+    build:
+      context: ../../apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+    container_name: p2-web
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
 volumes:
   qdrant_data:
