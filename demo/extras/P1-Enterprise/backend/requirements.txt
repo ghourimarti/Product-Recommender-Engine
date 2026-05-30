@@ -1,0 +1,54 @@
+# Web framework
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Config & validation
+pydantic-settings
+
+
+# Auth
+python-jose[cryptography]
+bcrypt
+fastapi
+
+# Rate limiting
+slowapi
+
+# Logging
+loguru
+
+# Metrics
+prometheus-client
+
+# LangChain (LCEL — no legacy imports)
+langchain
+langchain-core
+langchain-community
+langchain-groq
+langchain-huggingface
+langchain-chroma
+langchain-text-splitters
+
+# Embeddings
+sentence-transformers
+
+# Vector store
+chromadb
+
+# Utilities
+python-dotenv
+
+# Testing
+httpx
+pytest
+pytest-asyncio
+anyio
+
+# RAG evaluation
+ragas
+datasets
+
+# Linting / type checking (dev)
+ruff
+mypy

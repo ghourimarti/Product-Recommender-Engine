@@ -1,0 +1,81 @@
+services:
+
+  backend:
+    build:
+      context: backend
+      dockerfile: Dockerfile
+    image: anime-backend:v2.0.0
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      - ./chroma_db:/app/chroma_db
+      - ./logs:/app/logs
+    networks:
+      - anime_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    image: anime-frontend:v2.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE=http://backend:8000/v1
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - anime_net
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    networks:
+      - anime_net
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/anime-recommender.json
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/monitoring/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./infra/monitoring/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - anime_net
+    restart: unless-stopped
+
+networks:
+  anime_net:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:

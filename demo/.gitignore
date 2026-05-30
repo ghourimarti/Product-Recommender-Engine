@@ -1,0 +1,4 @@
+.env
+venv/
+FLIPKART_RECOMMENDER.egg-info/
+extraa/

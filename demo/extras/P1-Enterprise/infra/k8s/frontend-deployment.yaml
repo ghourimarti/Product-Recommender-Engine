@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anime-frontend
+  namespace: anime-recommender
+  labels:
+    app: anime-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: anime-frontend
+  template:
+    metadata:
+      labels:
+        app: anime-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: YOUR_REGISTRY/anime-frontend:v2.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8501
+          env:
+            - name: API_BASE
+              value: "http://anime-backend-svc:8000/v1"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            initialDelaySeconds: 15
+            periodSeconds: 10
