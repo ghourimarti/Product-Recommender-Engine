@@ -1,0 +1,25 @@
+{{- if .Values.networkPolicy.enabled }}
+# Default-deny ingress; allow only what we declare (D18).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "recommender.name" . }}-default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "recommender.name" . }}-backend-allow
+spec:
+  podSelector:
+    matchLabels: { app: recommender-backend }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: recommender-frontend } }
+        - namespaceSelector: {}   # ingress controller / prometheus scrape
+      ports:
+        - { protocol: TCP, port: {{ .Values.backend.port }} }
+{{- end }}

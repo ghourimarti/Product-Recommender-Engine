@@ -1,0 +1,31 @@
+groups:
+  - name: recommender-slo
+    rules:
+      - alert: BackendDown
+        expr: up{job="backend"} == 0
+        for: 1m
+        labels: { severity: page }
+        annotations: { summary: "Backend target down" }
+
+      - alert: HighErrorRate
+        # >1% 5xx over 5m breaches the 99.9% SLO.
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          / clamp_min(sum(rate(http_requests_total[5m])), 1) > 0.01
+        for: 5m
+        labels: { severity: page }
+        annotations: { summary: "Error rate >1% (SLO burn)" }
+
+      - alert: HighLatencyP99
+        expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 4
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "p99 latency >4s (NFR breach)" }
+
+  - name: recommender-cost
+    rules:
+      - alert: HighLLMSpendPerHour
+        expr: increase(llm_cost_usd_total[1h]) > 5
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "LLM spend >$5/hour — check cache hit-rate / consider kill switch" }

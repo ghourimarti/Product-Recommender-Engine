@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "recommender.name" . }}-embedding
+  labels: {{- include "recommender.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.embedding.replicas }}
+  selector:
+    matchLabels: { app: recommender-embedding }
+  template:
+    metadata:
+      labels: { app: recommender-embedding }
+    spec:
+      containers:
+        - name: embedding
+          image: {{ include "recommender.image" (dict "img" .Values.embedding.image "tag" .Values.embedding.tag "Values" .Values) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ containerPort: {{ .Values.embedding.port }} }]
+          readinessProbe:
+            httpGet: { path: /healthz, port: {{ .Values.embedding.port }} }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources: {{- toYaml .Values.embedding.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "recommender.name" . }}-embedding
+spec:
+  selector: { app: recommender-embedding }
+  ports: [{ port: {{ .Values.embedding.port }}, targetPort: {{ .Values.embedding.port }} }]

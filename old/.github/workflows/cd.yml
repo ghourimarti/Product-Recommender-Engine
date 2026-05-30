@@ -1,0 +1,83 @@
+name: cd
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # OIDC to assume the AWS deploy role (no static keys)
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [backend, frontend, embedding-service]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Build
+        run: |
+          IMG="$ECR_REGISTRY/recommender-${{ matrix.service == 'embedding-service' && 'embedding' || matrix.service }}"
+          echo "IMG=$IMG" >> $GITHUB_ENV
+          docker build -t "$IMG:${{ github.sha }}" ${{ matrix.service }}
+      - name: Scan image (Trivy) — fail on HIGH/CRITICAL
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMG }}:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: Push (immutable digest tag)
+        run: docker push "$IMG:${{ github.sha }}"
+
+  deploy-dev:
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Deploy via Helm (image digest promotion)
+        run: |
+          aws eks update-kubeconfig --name recommender-dev
+          helm upgrade --install rec infra/helm/recommender \
+            --set image.registry=$ECR_REGISTRY \
+            --set backend.tag=${{ github.sha }} \
+            --set frontend.tag=${{ github.sha }} \
+            --set embedding.tag=${{ github.sha }} \
+            --wait --timeout 10m
+
+  deploy-staging:
+    needs: deploy-dev
+    runs-on: ubuntu-latest
+    environment: staging   # requires manual approval (GitHub environment protection)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Promote same digest to staging
+        run: |
+          aws eks update-kubeconfig --name recommender-staging
+          helm upgrade --install rec infra/helm/recommender \
+            --set image.registry=$ECR_REGISTRY \
+            --set backend.tag=${{ github.sha }} \
+            --set frontend.tag=${{ github.sha }} \
+            --set embedding.tag=${{ github.sha }} \
+            --wait --timeout 10m
+      # Rollback: `helm rollback rec` (previous release) on failed smoke test.

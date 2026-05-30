@@ -1,0 +1,7 @@
+# Copy to <env>.tfvars and pass with -var-file. Never commit real .tfvars.
+region              = "us-east-1"
+environment         = "dev"
+node_desired_size   = 3
+node_max_size       = 10
+db_instance_class   = "db.t4g.medium"
+redis_node_type     = "cache.t4g.small"
