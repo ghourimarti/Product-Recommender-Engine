@@ -78,6 +78,39 @@ PY
 ```
 (On PowerShell, replace the `<<'PY' ... PY` heredoc with a `@' ... '@ | uv run python -` here-string.)
 
+### Step 5 — Ranking eval baseline (go/no-go gate)  *(needs OPENAI_API_KEY + Docker)*
+```bash
+docker compose -f infra/compose/docker-compose.yml up -d   # Qdrant
+uv run python -m evaluation.ranking.run                    # writes docs/eval-baseline.md  (make eval-ranking)
+uv run pytest -q tests/unit/test_ranking_metrics.py        # metric correctness (8 tests)
+```
+Expect aggregate ≈ **Recall@3 0.82 / NDCG@3 0.80 / MRR 0.83**. Open `docs/eval-baseline.md`
+for the per-query and per-tier (attribute vs semantic) breakdown.
+
+### Step 6 — LangChain RAG chain (grounded explanations)  *(needs an LLM key + Docker)*
+```bash
+docker compose -f infra/compose/docker-compose.yml up -d   # Qdrant
+uv run python -m retrieval.index                           # ensure catalog indexed
+uv run pytest -q tests/unit/test_chat_merge.py             # merge + provider-selection (6 tests)
+uv run pytest -q tests/integration/test_chat.py            # real-LLM end-to-end chat
+```
+Live eyeball (PowerShell here-string):
+```powershell
+@'
+from retrieval.store import QdrantHybridStore
+from retrieval.index import load_catalog
+from recommender.chat import chat
+s = QdrantHybridStore(); s.index(load_catalog())
+r = chat("headphones with good bass for the gym", [], s, k=3)
+print(r.summary)
+for it in r.items:
+    print(f"- {it.title} -> {it.reason}")
+'@ | uv run python -
+```
+The LLM provider is chosen from your `.env` keys in priority **Groq → OpenAI → Anthropic**
+(Decision 4). Reasons are grounded in real reviews; the LLM only writes reasons, never
+product facts.
+
 ---
 
 ## Quick "is everything healthy?" sweep

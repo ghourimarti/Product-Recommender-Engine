@@ -13,12 +13,22 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     openai_api_key: str = ""
+    groq_api_key: str = ""
+    anthropic_api_key: str = ""
     embedding_model: str = "text-embedding-3-small"
     embedding_dim: int = 1536
+
+    # LLM tiering (Decision 4): Groq primary -> OpenAI escalation -> Anthropic fallback.
+    groq_model: str = "llama-3.3-70b-versatile"
+    openai_model: str = "gpt-4o"
+    anthropic_model: str = "claude-sonnet-4-6"
 
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str = ""
     qdrant_collection: str = "products"
+
+    reranker_model: str = "BAAI/bge-reranker-base"  # cross-encoder (Decision 3), runs locally
+    rerank_enabled: bool = False  # A/B showed it regressed NDCG@3/Recall@3 — off by default
 
 
 @lru_cache

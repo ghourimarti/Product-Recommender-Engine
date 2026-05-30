@@ -1,0 +1,52 @@
+"""Integration test: end-to-end chat with a real LLM + Qdrant (Step 6).
+
+Skips unless an LLM key is configured and Qdrant is reachable.
+"""
+
+from __future__ import annotations
+
+import socket
+
+import pytest
+
+from core.config import get_settings
+from core.llm import available_providers
+from recommender.chat import chat
+from retrieval.index import load_catalog
+from retrieval.store import QdrantHybridStore
+
+pytestmark = pytest.mark.integration
+
+
+def _qdrant_reachable() -> bool:
+    sock = socket.socket()
+    sock.settimeout(1.0)
+    try:
+        sock.connect(("localhost", 6333))
+        return True
+    except OSError:
+        return False
+    finally:
+        sock.close()
+
+
+@pytest.fixture(scope="module")
+def store() -> QdrantHybridStore:
+    if not available_providers(get_settings()):
+        pytest.skip("no LLM provider key configured")
+    if not _qdrant_reachable():
+        pytest.skip("Qdrant not reachable on localhost:6333")
+    s = QdrantHybridStore()
+    s.index(load_catalog())
+    return s
+
+
+def test_chat_returns_grounded_recommendations(store: QdrantHybridStore) -> None:
+    response = chat("headphones with good bass", [], store, k=3)
+    catalog_ids = {p.product_id for p in load_catalog()}
+
+    assert response.no_match is False
+    assert 1 <= len(response.items) <= 3
+    assert response.summary.strip()
+    assert all(item.product_id in catalog_ids for item in response.items)
+    assert response.items[0].reason.strip()  # the top pick must be explained

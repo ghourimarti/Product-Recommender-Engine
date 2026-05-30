@@ -9,6 +9,8 @@ dependencies = [
     "langchain-core>=0.3",
     "langchain-openai>=0.2",
     "langchain-qdrant>=0.2",
+    "langchain-groq>=0.2",
+    "langchain-anthropic>=0.2",
     "qdrant-client>=1.12,<1.13",  # pinned to match the v1.12.4 server image
     "fastembed>=0.4",
 ]
@@ -69,6 +71,8 @@ module = [
     "langchain_core.*",
     "langchain_openai.*",
     "langchain_qdrant.*",
+    "langchain_groq.*",
+    "langchain_anthropic.*",
     "qdrant_client.*",
     "fastembed.*",
 ]

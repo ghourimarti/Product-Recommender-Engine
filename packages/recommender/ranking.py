@@ -58,6 +58,7 @@ def rank_products(
                 avg_rating=candidate.avg_rating,
                 review_count=candidate.review_count,
                 semantic_score=candidate.semantic_score,
+                text=candidate.text,
             )
         )
 

@@ -72,10 +72,43 @@ class RankedProduct(BaseModel):
     avg_rating: float
     review_count: int
     semantic_score: float  # raw retrieval score (pre-clamp)
+    text: str  # evidence text (title + representative reviews) for grounding explanations
 
 
 class RankingResult(BaseModel):
     """Ranked recommendations plus the 'no good match' signal (Decision 21 / F6)."""
 
     products: list[RankedProduct]
+    no_match: bool
+
+
+class Explanation(BaseModel):
+    """LLM-authored grounded reason for one recommended product (structured output)."""
+
+    product_id: str = Field(description="Exact product_id from the candidate list.")
+    reason: str = Field(description="1-2 sentences, grounded only in the provided reviews/rating.")
+
+
+class ExplanationSet(BaseModel):
+    """Structured-output schema the LLM returns: an overall summary + per-product reasons."""
+
+    summary: str = Field(description="One-line overall summary of the recommendations.")
+    explanations: list[Explanation]
+
+
+class RecommendationItem(BaseModel):
+    """A final recommendation: our ranked product facts + the LLM's grounded reason."""
+
+    product_id: str
+    title: str
+    avg_rating: float
+    final_score: float
+    reason: str
+
+
+class ChatResponse(BaseModel):
+    """The end-to-end chat result returned to the API/UI."""
+
+    summary: str
+    items: list[RecommendationItem]
     no_match: bool
