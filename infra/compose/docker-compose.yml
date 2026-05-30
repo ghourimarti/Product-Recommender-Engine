@@ -15,5 +15,12 @@ services:
       timeout: 5s
       retries: 5
 
+  dynamodb:
+    image: amazon/dynamodb-local:2.5.2
+    container_name: p2-dynamodb
+    command: "-jar DynamoDBLocal.jar -inMemory -sharedDb"
+    ports:
+      - "8000:8000"
+
 volumes:
   qdrant_data:

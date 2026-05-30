@@ -7,6 +7,7 @@ assembled from whichever API keys are configured, in priority order Groq -> Open
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any
 
 from langchain_anthropic import ChatAnthropic
@@ -19,7 +20,12 @@ from pydantic import SecretStr
 
 from core.config import Settings, get_settings
 from core.models import ExplanationSet, RankedProduct
-from core.prompts import EXPLAIN_HUMAN, EXPLAIN_SYSTEM, REWRITE_SYSTEM
+from core.prompts import (
+    EXPLAIN_HUMAN,
+    EXPLAIN_STREAM_SYSTEM,
+    EXPLAIN_SYSTEM,
+    REWRITE_SYSTEM,
+)
 
 MAX_REVIEW_CHARS = 800  # cap evidence text per product to bound prompt cost
 
@@ -103,3 +109,15 @@ def explain(query: str, products: list[RankedProduct], model: Any) -> Explanatio
     chain = prompt | structured
     result: ExplanationSet = chain.invoke({"query": query, "products": _format_products(products)})
     return result
+
+
+async def astream_explanation(
+    query: str, products: list[RankedProduct], model: Any
+) -> AsyncIterator[str]:
+    """Stream a grounded prose explanation token-by-token (for the SSE /chat path)."""
+    prompt = ChatPromptTemplate.from_messages(
+        [("system", EXPLAIN_STREAM_SYSTEM), ("human", EXPLAIN_HUMAN)]
+    )
+    chain = prompt | model | StrOutputParser()
+    async for chunk in chain.astream({"query": query, "products": _format_products(products)}):
+        yield str(chunk)

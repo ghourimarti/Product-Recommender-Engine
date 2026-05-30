@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     reranker_model: str = "BAAI/bge-reranker-base"  # cross-encoder (Decision 3), runs locally
     rerank_enabled: bool = False  # A/B showed it regressed NDCG@3/Recall@3 — off by default
 
+    # Primary DB: DynamoDB (Decision 1). Local uses DynamoDB-local + dummy creds.
+    aws_region: str = "us-east-1"
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    dynamodb_endpoint: str = "http://localhost:8000"
+    dynamodb_table: str = "p2-recommender"
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -29,3 +29,6 @@ up:
 
 down:
 	docker compose -f infra/compose/docker-compose.yml down
+
+serve:
+	uv run uvicorn api.main:app --app-dir apps --host 0.0.0.0 --port 8080 --reload

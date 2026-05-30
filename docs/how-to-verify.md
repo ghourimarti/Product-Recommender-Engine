@@ -122,15 +122,44 @@ is the weak metric (documented improvement target). Note: the RAGAS *library* is
 this stack (it hard-imports a removed `langchain_community.chat_models.vertexai`), so this is an
 equivalent custom LLM-judge harness — see the baseline file's methodology section.
 
+### Step 8 — FastAPI + DynamoDB chat history (SSE)  *(needs Docker: Qdrant + DynamoDB-local)*
+```bash
+docker compose -f infra/compose/docker-compose.yml up -d   # Qdrant + DynamoDB-local
+uv run python -m retrieval.index                           # ensure catalog indexed
+uv run pytest -q tests/unit/test_api_health.py \
+               tests/integration/test_history.py \
+               tests/integration/test_api.py
+```
+`test_history.py::test_per_user_isolation` proves the fix for the demo's shared-session bug.
+Run the API and hit it:
+```bash
+make serve     # uv run uvicorn api.main:app --app-dir apps --port 8080 --reload
+curl http://localhost:8080/health
+curl -X POST http://localhost:8080/recommend -H "Content-Type: application/json" -d "{\"query\":\"good bass headphones\",\"k\":3}"
+curl -N -X POST http://localhost:8080/chat -H "Content-Type: application/json" -d "{\"query\":\"good bass headphones\",\"session_id\":\"s1\",\"user_id\":\"alice\",\"k\":2}"
+curl http://localhost:8080/metrics | findstr http_requests_total
+```
+
 ---
 
-## Quick "is everything healthy?" sweep
+## Full regression sweep — verify ALL steps at once
 
 ```bash
-docker compose -f infra/compose/docker-compose.yml up -d
-uv sync
-make lint && make type && make test
-```
-Green lint + types + all tests passing = the build is in a good state.
+docker compose -f infra/compose/docker-compose.yml up -d     # Qdrant + DynamoDB-local
+uv sync                                                       # env in sync
 
-> This file grows as new steps land (Step 5 ranking eval, Step 6 chain, Step 8 API, ...).
+# gates (Steps 1-8 code/logic) -> expect: all checks passed / no issues / 47 passed
+uv run ruff check . ; uv run ruff format --check .
+uv run mypy packages apps tests
+uv run pytest -q
+
+# executable pipelines
+uv run python -m core.aggregate            # Step 2  -> reviews=450 products=9 errors=0
+uv run python -m retrieval.index           # Step 3  -> indexed 9 products
+uv run python -m evaluation.ranking.run    # Steps 4/5/5b -> NDCG@3 0.80 / MRR 0.83 (+reranker A/B)
+uv run python -m evaluation.ragas.run      # Step 7  -> answer_relevancy 0.94 / faithfulness 0.56  (~$0.30 LLM)
+```
+All green = Steps 1-8 are healthy. (`pytest` integration tests auto-skip if Qdrant/DynamoDB/keys
+are absent, so unit-only runs work anywhere.)
+
+> This file grows as new steps land (Step 9 caching, Step 10 auth, ...).

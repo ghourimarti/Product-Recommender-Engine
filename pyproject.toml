@@ -13,6 +13,10 @@ dependencies = [
     "langchain-anthropic>=0.2",
     "qdrant-client>=1.12,<1.13",  # pinned to match the v1.12.4 server image
     "fastembed>=0.4",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "boto3>=1.35",
+    "prometheus-client>=0.20",
 ]
 # NOTE: RAGAS was the Decision-19 choice but every ragas release hard-imports
 # langchain_community.chat_models.vertexai (removed in langchain-community for
@@ -38,6 +42,7 @@ dev = [
     "mypy>=1.11",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
+    "httpx>=0.27",
 ]
 
 [tool.ruff]
@@ -55,7 +60,7 @@ python_version = "3.12"
 strict = true
 namespace_packages = true
 explicit_package_bases = true
-mypy_path = "packages"
+mypy_path = ["packages", "apps"]
 
 [tool.pytest.ini_options]
 pythonpath = ["packages", "apps"]
@@ -79,5 +84,7 @@ module = [
     "langchain_anthropic.*",
     "qdrant_client.*",
     "fastembed.*",
+    "boto3.*",
+    "botocore.*",
 ]
 ignore_missing_imports = true
