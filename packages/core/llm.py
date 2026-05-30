@@ -62,6 +62,7 @@ def _make_model(provider: str, settings: Settings) -> Any:
         model=model_names[provider],
         api_key=SecretStr(api_keys[provider]),
         temperature=0.3,
+        max_tokens=settings.max_output_tokens,  # per-request cost cap (Decision 20)
     )
 
 

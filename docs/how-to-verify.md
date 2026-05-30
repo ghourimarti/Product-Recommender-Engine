@@ -179,6 +179,18 @@ See traces end-to-end: set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317` i
 `p2-recommender`). For LLM token/cost traces, set `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`
 (Langfuse Cloud free tier or self-host) + `LANGFUSE_HOST`. Both degrade gracefully if unset.
 
+### Step 12 — Security + cost controls + kill-switch  *(Docker: Qdrant + Redis for kill-switch)*
+```bash
+uv run pytest -q tests/unit/test_security.py            # PII redaction, injection markers, merge resistance
+uv run pytest -q tests/integration/test_killswitch.py   # LLM_ENABLED=false -> cards but no tokens
+```
+- **PII redaction:** queries are logged via `redact_pii` (emails/phones/cards -> `[REDACTED_*]`).
+- **Injection resistance:** the LLM only writes *reasons*; product set is fixed by our ranking,
+  so injected review text can't add/swap products (`test_merge_ignores_injected_product_ids`).
+- **Cost cap:** `max_output_tokens` (default 600) on every LLM call.
+- **Kill-switch:** set `LLM_ENABLED=false` in `.env` -> `/chat` returns recommendation cards +
+  a `degraded` done event, **no** token stream (LLM fully bypassed). `/recommend` unaffected.
+
 ---
 
 ## Full regression sweep — verify ALL steps at once

@@ -8,6 +8,7 @@ explanation token-by-token (Decision 8), and persists per-user history (Decision
 from __future__ import annotations
 
 import json
+import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from functools import lru_cache
@@ -21,15 +22,19 @@ from starlette.responses import Response
 
 from core.auth import AuthError, user_id_from_token
 from core.cache import RedisCache, make_redis
+from core.config import get_settings
 from core.embeddings import get_dense_embeddings
 from core.history import DynamoChatHistory
 from core.llm import astream_explanation, build_chat_model, rewrite_query
 from core.models import ChatRequest, RankingResult, RecommendRequest
 from core.observability import configure_observability, get_langchain_callbacks
 from core.ratelimit import RateLimiter, RateLimitExceeded
+from core.security import redact_pii
 from recommender.cached import cached_recommend
 from retrieval.semantic_cache import SemanticCache
 from retrieval.store import QdrantHybridStore
+
+logger = logging.getLogger("p2.api")
 
 REQUESTS = Counter("http_requests_total", "Total HTTP requests", ["method", "path", "status"])
 LATENCY = Histogram("http_request_duration_seconds", "Request latency (s)", ["path"])
@@ -135,6 +140,7 @@ def recommend_endpoint(
     req: RecommendRequest, user_id: str = Depends(rate_limited_user)
 ) -> RankingResult:
     """Sync, ranking-only path (no LLM) — the fast, 4-layer-cached recommendation list."""
+    logger.info("recommend user=%s query=%s", user_id, redact_pii(req.query))  # PII-safe log
     return cached_recommend(
         req.query, _store(), _cache(), _semantic_cache(), _embeddings(), k=req.k
     )
@@ -145,12 +151,18 @@ async def chat_endpoint(
     req: ChatRequest, user_id: str = Depends(rate_limited_user)
 ) -> StreamingResponse:
     """SSE: emit recommendation cards, then stream the grounded explanation; persist history."""
+    logger.info("chat user=%s session=%s query=%s", user_id, req.session_id, redact_pii(req.query))
 
     async def event_stream() -> AsyncIterator[str]:
-        model = _model()
+        llm_on = get_settings().llm_enabled
         callbacks = list(_callbacks())
-        history = _history().get_messages(user_id, req.session_id)
-        standalone = rewrite_query(req.query, history, model, callbacks) if history else req.query
+        model = _model() if llm_on else None
+        history = _history().get_messages(user_id, req.session_id) if llm_on else []
+        standalone = (
+            rewrite_query(req.query, history, model, callbacks)
+            if (history and llm_on)
+            else req.query
+        )
 
         result = cached_recommend(
             standalone, _store(), _cache(), _semantic_cache(), _embeddings(), k=req.k
@@ -158,6 +170,10 @@ async def chat_endpoint(
         yield _sse("recommendations", result.model_dump())
         if result.no_match or not result.products:
             yield _sse("done", {"no_match": True})
+            return
+
+        if not llm_on:  # kill-switch (Decision 20): cards served, LLM explanation disabled
+            yield _sse("done", {"no_match": False, "degraded": True})
             return
 
         tokens: list[str] = []

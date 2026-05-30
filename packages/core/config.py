@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
 
+    # Security + cost controls (Decisions 18, 20).
+    llm_enabled: bool = True  # kill-switch: false -> serve cached recs, skip LLM explanations
+    max_output_tokens: int = 600
+
 
 @lru_cache
 def get_settings() -> Settings:
