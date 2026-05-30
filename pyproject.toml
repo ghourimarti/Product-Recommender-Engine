@@ -19,6 +19,10 @@ dependencies = [
     "prometheus-client>=0.20",
     "redis>=5.0",
     "pyjwt[crypto]>=2.9",
+    "opentelemetry-sdk>=1.27",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.27",
+    "opentelemetry-instrumentation-fastapi>=0.48b0",
+    "langfuse>=2,<3",
 ]
 # NOTE: RAGAS was the Decision-19 choice but every ragas release hard-imports
 # langchain_community.chat_models.vertexai (removed in langchain-community for
@@ -92,5 +96,7 @@ module = [
     "redis.*",
     "fakeredis.*",
     "jwt.*",
+    "opentelemetry.*",
+    "langfuse.*",
 ]
 ignore_missing_imports = true

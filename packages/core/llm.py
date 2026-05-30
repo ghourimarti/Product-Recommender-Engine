@@ -91,33 +91,47 @@ def _format_products(products: list[RankedProduct]) -> str:
     return "\n".join(blocks)
 
 
-def rewrite_query(query: str, history: list[BaseMessage], model: Any) -> str:
+def rewrite_query(
+    query: str, history: list[BaseMessage], model: Any, callbacks: list[Any] | None = None
+) -> str:
     """History-aware rewrite of the latest message into a standalone query."""
     prompt = ChatPromptTemplate.from_messages(
         [("system", REWRITE_SYSTEM), MessagesPlaceholder("history"), ("human", "{query}")]
     )
     chain = prompt | model | StrOutputParser()
-    return str(chain.invoke({"query": query, "history": history})).strip()
+    config = {"callbacks": callbacks or []}
+    return str(chain.invoke({"query": query, "history": history}, config=config)).strip()
 
 
-def explain(query: str, products: list[RankedProduct], model: Any) -> ExplanationSet:
+def explain(
+    query: str, products: list[RankedProduct], model: Any, callbacks: list[Any] | None = None
+) -> ExplanationSet:
     """Grounded, structured per-product explanations (LLM cannot alter product facts)."""
     structured = model.with_structured_output(ExplanationSet)
     prompt = ChatPromptTemplate.from_messages(
         [("system", EXPLAIN_SYSTEM), ("human", EXPLAIN_HUMAN)]
     )
     chain = prompt | structured
-    result: ExplanationSet = chain.invoke({"query": query, "products": _format_products(products)})
+    config = {"callbacks": callbacks or []}
+    result: ExplanationSet = chain.invoke(
+        {"query": query, "products": _format_products(products)}, config=config
+    )
     return result
 
 
 async def astream_explanation(
-    query: str, products: list[RankedProduct], model: Any
+    query: str,
+    products: list[RankedProduct],
+    model: Any,
+    callbacks: list[Any] | None = None,
 ) -> AsyncIterator[str]:
     """Stream a grounded prose explanation token-by-token (for the SSE /chat path)."""
     prompt = ChatPromptTemplate.from_messages(
         [("system", EXPLAIN_STREAM_SYSTEM), ("human", EXPLAIN_HUMAN)]
     )
     chain = prompt | model | StrOutputParser()
-    async for chunk in chain.astream({"query": query, "products": _format_products(products)}):
+    config = {"callbacks": callbacks or []}
+    async for chunk in chain.astream(
+        {"query": query, "products": _format_products(products)}, config=config
+    ):
         yield str(chunk)

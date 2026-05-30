@@ -169,6 +169,16 @@ curl http://localhost:8080/recommend -X POST -H "Authorization: Bearer $tok" -H 
 With a real Clerk instance, set `CLERK_JWKS_URL` in `.env` and send Clerk-issued tokens instead.
 Rate limit: 30/min + 500/day per user -> 429 with `Retry-After`.
 
+### Step 11 — Observability (OTel traces + Langfuse)  *(needs Docker: Jaeger)*
+```bash
+docker compose -f infra/compose/docker-compose.yml up -d    # includes Jaeger (UI :16686, OTLP :4317)
+uv run pytest -q tests/unit/test_observability.py
+```
+See traces end-to-end: set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317` in `.env`, then
+`make serve` and hit the API — open the **Jaeger UI at http://localhost:16686** (service
+`p2-recommender`). For LLM token/cost traces, set `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`
+(Langfuse Cloud free tier or self-host) + `LANGFUSE_HOST`. Both degrade gracefully if unset.
+
 ---
 
 ## Full regression sweep — verify ALL steps at once

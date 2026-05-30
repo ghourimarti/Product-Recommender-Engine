@@ -25,6 +25,7 @@ from core.embeddings import get_dense_embeddings
 from core.history import DynamoChatHistory
 from core.llm import astream_explanation, build_chat_model, rewrite_query
 from core.models import ChatRequest, RankingResult, RecommendRequest
+from core.observability import configure_observability, get_langchain_callbacks
 from core.ratelimit import RateLimiter, RateLimitExceeded
 from recommender.cached import cached_recommend
 from retrieval.semantic_cache import SemanticCache
@@ -71,6 +72,11 @@ def _embeddings() -> Any:
 @lru_cache
 def _rate_limiter() -> RateLimiter:
     return RateLimiter.from_settings(_cache())
+
+
+@lru_cache
+def _callbacks() -> tuple[Any, ...]:
+    return tuple(get_langchain_callbacks())
 
 
 def require_user(authorization: str | None = Header(default=None)) -> str:
@@ -142,8 +148,9 @@ async def chat_endpoint(
 
     async def event_stream() -> AsyncIterator[str]:
         model = _model()
+        callbacks = list(_callbacks())
         history = _history().get_messages(user_id, req.session_id)
-        standalone = rewrite_query(req.query, history, model) if history else req.query
+        standalone = rewrite_query(req.query, history, model, callbacks) if history else req.query
 
         result = cached_recommend(
             standalone, _store(), _cache(), _semantic_cache(), _embeddings(), k=req.k
@@ -154,7 +161,7 @@ async def chat_endpoint(
             return
 
         tokens: list[str] = []
-        async for token in astream_explanation(standalone, result.products, model):
+        async for token in astream_explanation(standalone, result.products, model, callbacks):
             tokens.append(token)
             yield _sse("token", {"text": token})
         yield _sse("done", {"no_match": False})
@@ -163,3 +170,6 @@ async def chat_endpoint(
         _history().add_message(user_id, req.session_id, "ai", "".join(tokens))
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+configure_observability(app)  # OTel traces + FastAPI instrumentation (best-effort)

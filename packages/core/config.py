@@ -42,9 +42,16 @@ class Settings(BaseSettings):
 
     # Auth (Decision 9). With clerk_jwks_url set -> verify Clerk RS256 tokens; else dev HS256.
     clerk_jwks_url: str = ""
-    auth_dev_secret: str = "dev-secret-change-me"
+    auth_dev_secret: str = "dev-secret-change-me-in-prod-0123456789abcdef"  # >=32B (HS256)
     rate_limit_per_minute: int = 30
     rate_limit_per_day: int = 500
+
+    # Observability (Decision 13). All optional — telemetry degrades gracefully if unset.
+    otel_exporter_otlp_endpoint: str = ""  # e.g. http://localhost:4317 (Jaeger/collector)
+    otel_service_name: str = "p2-recommender"
+    langfuse_host: str = ""
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
 
 
 @lru_cache
