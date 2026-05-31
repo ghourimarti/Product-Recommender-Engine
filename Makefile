@@ -1,4 +1,4 @@
-.PHONY: install lint fmt type test eval-ranking eval-rag up down
+.PHONY: install lint fmt type test eval-ranking eval-rag up down helm-lint
 
 install:
 	uv sync
@@ -29,6 +29,10 @@ up:
 
 down:
 	docker compose -f infra/compose/docker-compose.yml down
+
+helm-lint:
+	helm lint ops/helm/p2-recommender
+	helm template p2 ops/helm/p2-recommender | kubeconform -summary
 
 serve:
 	uv run uvicorn api.main:app --app-dir apps --host 0.0.0.0 --port 8080 --reload
