@@ -1,0 +1,6 @@
+apiVersion: v2
+name: p2-recommender
+description: Conversational, rating-aware product recommender (api + web + qdrant + redis)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
