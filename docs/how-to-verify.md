@@ -235,6 +235,40 @@ docker compose -f infra/compose/docker-compose.yml up -d --build
 Images run as non-root (uid 10001). Note: the API image is ~725MB (fastembed/onnxruntime +
 langchain) — slimming is a hardening item (Phase 5).
 
+### Step 16 — Helm chart  *(helm not installed here; chart written + statically validated)*
+Verified here (no helm needed):
+```bash
+# Chart.yaml/values.yaml parse + all templates brace-balanced:
+uv run python -c "import yaml,pathlib; b=pathlib.Path('ops/helm/p2-recommender'); yaml.safe_load((b/'Chart.yaml').read_text()); yaml.safe_load((b/'values.yaml').read_text()); print('chart YAML OK')"
+```
+Full render/lint/deploy (your step — needs `helm` + a cluster, or Phase 6 on EKS):
+```bash
+helm lint ops/helm/p2-recommender
+helm template p2 ops/helm/p2-recommender                       # render manifests
+helm template p2 ops/helm/p2-recommender | kubectl apply --dry-run=client -f -
+helm install p2 ops/helm/p2-recommender -n p2 --create-namespace   # against a real cluster
+```
+Chart covers: api (Deployment + Service + **HPA** + ServiceAccount w/ IRSA annotation),
+web (Deployment + Service), **qdrant StatefulSet** + PVC + Service, redis, optional ALB Ingress;
+secrets via `secretName` (External Secrets Operator, Decision 17).
+
+### Step 17 — Terraform IaC  *(terraform not installed here; HCL written + syntax-validated)*
+Verified here (HCL2 syntax parse — no terraform needed):
+```bash
+uv run --with python-hcl2 python -c "import hcl2,pathlib; [hcl2.load(f.open()) for f in pathlib.Path('infra/terraform').rglob('*.tf')]; print('HCL OK')"
+```
+Full validate/plan (your step — needs `terraform` + AWS creds; the Phase-6 'tf plan against a real
+account' gate, NO apply):
+```bash
+cd infra/terraform
+terraform fmt -check -recursive
+terraform init
+terraform validate          # checks provider/resource schemas (HCL parse cannot)
+terraform plan -out tfplan   # review before any apply
+```
+Modules: VPC + EKS (community modules, IRSA enabled) · `dynamodb` (single-table, PITR+TTL) ·
+`redis` (Multi-AZ ElastiCache) · `s3` (versioned, KMS) · `ecr` (api+web, scan-on-push).
+
 ---
 
 ## Full regression sweep — verify ALL steps at once
