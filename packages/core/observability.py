@@ -8,6 +8,7 @@ This lets the app run locally with zero observability config, while production j
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from opentelemetry import trace
@@ -40,12 +41,10 @@ def setup_telemetry(settings: Settings | None = None) -> None:
 
 
 def instrument_fastapi(app: Any) -> None:
-    try:
+    with contextlib.suppress(Exception):  # instrumentation is best-effort; never break the app
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
         FastAPIInstrumentor.instrument_app(app)
-    except Exception:  # instrumentation is best-effort; never break the app
-        pass
 
 
 def get_langchain_callbacks(settings: Settings | None = None) -> list[Any]:
@@ -69,8 +68,6 @@ def get_langchain_callbacks(settings: Settings | None = None) -> list[Any]:
 
 def configure_observability(app: Any) -> None:
     """One-call setup for the API (best-effort)."""
-    try:
+    with contextlib.suppress(Exception):
         setup_telemetry()
         instrument_fastapi(app)
-    except Exception:
-        pass

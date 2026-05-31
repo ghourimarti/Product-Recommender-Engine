@@ -1,0 +1,40 @@
+# Prometheus alerting rules (Decision 13/20). Load via Alertmanager -> PagerDuty/Slack.
+# Metric names match the app's Prometheus instrumentation (apps/api/main.py) + Langfuse exporters.
+groups:
+  - name: p2-recommender-slo
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+            / sum(rate(http_requests_total[5m])) > 0.02
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "5xx rate > 2% (SLO breach)"
+
+      - alert: HighLatencyP95
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: "p95 latency > 2s (SLO target)"
+
+      - alert: LowCacheHitRate
+        expr: |
+          sum(rate(cache_hits_total[15m]))
+            / (sum(rate(cache_hits_total[15m])) + sum(rate(cache_misses_total[15m]))) < 0.6
+        for: 30m
+        labels: { severity: warn }
+        annotations:
+          summary: "Cache hit-rate < 60% (cost target at risk)"
+
+  - name: p2-recommender-cost
+    rules:
+      # Emitted from Langfuse cost export (per Decision 20). Threshold tuned per budget.
+      - alert: LLMCostPerHourHigh
+        expr: llm_cost_usd_per_hour > 5
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: "LLM spend/hour over budget — consider kill-switch (LLM_ENABLED=false)"

@@ -1,12 +1,12 @@
-"""Per-user chat history in DynamoDB single-table (Decision 1).
+"""Per-user chat history in DynamoDB single-table (Decision 1) + GDPR deletion/export (D24).
 
-Isolation is structural: the partition key embeds the user id, so user A's query can never
-return user B's messages. This replaces the demo's process-global in-memory dict (which
-leaked across users and was lost on restart).
+Isolation is structural: the partition key is the user id, so user A's query can never return
+user B's messages. All of a user's data lives under one partition, which makes account-level
+right-to-be-forgotten (delete) and DSAR (export) a single query — no GSI or scan needed.
 
 Item shape (single-table):
-    PK = "USER#{user_id}#SESSION#{session_id}"
-    SK = "MSG#{nanos}#{rand}"   (sortable -> chronological)
+    PK = "USER#{user_id}"
+    SK = "SESSION#{session_id}#MSG#{nanos}#{rand}"   (sortable -> chronological within a session)
     role, content
 """
 
@@ -23,12 +23,21 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from core.config import Settings, get_settings
 
 
-def _partition_key(user_id: str, session_id: str) -> str:
-    return f"USER#{user_id}#SESSION#{session_id}"
+def _user_pk(user_id: str) -> str:
+    return f"USER#{user_id}"
+
+
+def _session_prefix(session_id: str) -> str:
+    return f"SESSION#{session_id}#MSG#"
+
+
+def _session_of(sort_key: str) -> str:
+    # "SESSION#{sid}#MSG#..." -> sid
+    return sort_key.split("#", 2)[1] if sort_key.startswith("SESSION#") else ""
 
 
 class DynamoChatHistory:
-    """DynamoDB-backed chat history with per-user isolation."""
+    """DynamoDB-backed chat history with per-user isolation + GDPR delete/export."""
 
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
@@ -64,19 +73,16 @@ class DynamoChatHistory:
         client.get_waiter("table_exists").wait(TableName=self._table_name)
 
     def add_message(self, user_id: str, session_id: str, role: str, content: str) -> None:
-        sort_key = f"MSG#{time.time_ns()}#{uuid.uuid4().hex[:8]}"
+        sort_key = f"{_session_prefix(session_id)}{time.time_ns()}#{uuid.uuid4().hex[:8]}"
         self._table().put_item(
-            Item={
-                "PK": _partition_key(user_id, session_id),
-                "SK": sort_key,
-                "role": role,
-                "content": content,
-            }
+            Item={"PK": _user_pk(user_id), "SK": sort_key, "role": role, "content": content}
         )
 
     def get_messages(self, user_id: str, session_id: str, limit: int = 20) -> list[BaseMessage]:
         response = self._table().query(
-            KeyConditionExpression=Key("PK").eq(_partition_key(user_id, session_id)),
+            KeyConditionExpression=(
+                Key("PK").eq(_user_pk(user_id)) & Key("SK").begins_with(_session_prefix(session_id))
+            ),
             ScanIndexForward=True,
             Limit=limit,
         )
@@ -89,14 +95,35 @@ class DynamoChatHistory:
                 messages.append(AIMessage(content=content))
         return messages
 
-    def clear(self, user_id: str, session_id: str) -> int:
-        """Delete all messages for a (user, session). Returns count (GDPR path, Step 24)."""
+    def _delete_items(self, items: list[dict[str, Any]]) -> int:
         table = self._table()
-        response = table.query(
-            KeyConditionExpression=Key("PK").eq(_partition_key(user_id, session_id))
-        )
-        items = response.get("Items", [])
         with table.batch_writer() as batch:
             for item in items:
                 batch.delete_item(Key={"PK": item["PK"], "SK": item["SK"]})
         return len(items)
+
+    def clear_session(self, user_id: str, session_id: str) -> int:
+        """Delete one session's messages. Returns count."""
+        response = self._table().query(
+            KeyConditionExpression=(
+                Key("PK").eq(_user_pk(user_id)) & Key("SK").begins_with(_session_prefix(session_id))
+            )
+        )
+        return self._delete_items(response.get("Items", []))
+
+    def delete_user(self, user_id: str) -> int:
+        """Right-to-be-forgotten (Decision 24): delete ALL of a user's data. Returns count."""
+        response = self._table().query(KeyConditionExpression=Key("PK").eq(_user_pk(user_id)))
+        return self._delete_items(response.get("Items", []))
+
+    def export_user(self, user_id: str) -> list[dict[str, str]]:
+        """DSAR (Decision 24): export all of a user's stored messages as plain records."""
+        response = self._table().query(KeyConditionExpression=Key("PK").eq(_user_pk(user_id)))
+        return [
+            {
+                "session_id": _session_of(str(item["SK"])),
+                "role": str(item.get("role", "")),
+                "content": str(item.get("content", "")),
+            }
+            for item in response.get("Items", [])
+        ]

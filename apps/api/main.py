@@ -223,4 +223,23 @@ async def chat_endpoint(
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+@app.delete("/history")
+def delete_history(session_id: str, user_id: str = Depends(require_user)) -> dict[str, int]:
+    """Clear one of the caller's chat sessions."""
+    return {"deleted": _history().clear_session(user_id, session_id)}
+
+
+@app.delete("/account")
+def delete_account(user_id: str = Depends(require_user)) -> dict[str, int]:
+    """Right-to-be-forgotten (Decision 24): delete ALL of the caller's data."""
+    logger.info("account deletion requested user=%s", user_id)
+    return {"deleted": _history().delete_user(user_id)}
+
+
+@app.get("/account/export")
+def export_account(user_id: str = Depends(require_user)) -> dict[str, Any]:
+    """DSAR (Decision 24): export all of the caller's stored data."""
+    return {"user_messages": _history().export_user(user_id)}
+
+
 configure_observability(app)  # OTel traces + FastAPI instrumentation (best-effort)
