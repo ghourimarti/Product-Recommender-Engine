@@ -1,0 +1,59 @@
+name: CD
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  id-token: write   # OIDC -> AWS (no long-lived keys, Decision 16)
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build & push API image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          docker build -f apps/api/Dockerfile -t "$REGISTRY/p2-api:$TAG" .
+          docker push "$REGISTRY/p2-api:$TAG"
+      - name: Build & push Web image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          docker build -f apps/web/Dockerfile -t "$REGISTRY/p2-web:$TAG" apps/web
+          docker push "$REGISTRY/p2-web:$TAG"
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-push
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      # Progressive delivery: Argo Rollouts canary in prod (Decision 16). Helm shown for clarity;
+      # in the GitOps model ArgoCD watches the chart repo and syncs on tag bump instead.
+      - name: Deploy (Helm upgrade with new image tags)
+        run: |
+          aws eks update-kubeconfig --name p2-recommender-prod-eks --region "$AWS_REGION"
+          helm upgrade --install p2 ops/helm/p2-recommender -n p2 --create-namespace \
+            --set api.image.tag=${{ github.ref_name }} \
+            --set web.image.tag=${{ github.ref_name }}

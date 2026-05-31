@@ -24,6 +24,9 @@ eval-ranking:
 eval-rag:
 	uv run python -m evaluation.ragas.run
 
+eval-gate:
+	uv run python -m evaluation.ranking.gate
+
 up:
 	docker compose -f infra/compose/docker-compose.yml up -d
 

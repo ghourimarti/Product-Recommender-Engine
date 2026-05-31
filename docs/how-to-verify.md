@@ -269,6 +269,17 @@ terraform plan -out tfplan   # review before any apply
 Modules: VPC + EKS (community modules, IRSA enabled) · `dynamodb` (single-table, PITR+TTL) ·
 `redis` (Multi-AZ ElastiCache) · `s3` (versioned, KMS) · `ecr` (api+web, scan-on-push).
 
+### Step 18 — CI/CD + eval gate  *(workflows; run the equivalent locally)*
+```bash
+uv run python -c "import yaml,pathlib; [yaml.safe_load(f.read_text()) for f in pathlib.Path('.github/workflows').glob('*.yml')]; print('workflows OK')"
+uv run pytest -q tests/unit/test_eval_gate.py     # gate decision logic (pure)
+uv run python -m evaluation.ranking.gate          # eval gate end-to-end -> PASS/FAIL + exit code
+```
+`ci.yml` runs 3 jobs: **lint-type-test** -> **integration** (qdrant/redis/dynamodb service
+containers) -> **eval-gate** (blocks merge if NDCG@3/MRR fall > 0.05 below `baseline.json`).
+`cd.yml` builds/pushes to ECR via **OIDC** and deploys on `v*` tags. Run the real workflow with
+[`act`](https://github.com/nektos/act); otherwise the commands above are exactly what each job runs.
+
 ---
 
 ## Full regression sweep — verify ALL steps at once
