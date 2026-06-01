@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     # Security + cost controls (Decisions 18, 20).
     llm_enabled: bool = True  # kill-switch: false -> serve cached recs, skip LLM explanations
     max_output_tokens: int = 600
+    # CORS allow-list for the browser frontend (Decision 18: locked to known origins).
+    cors_origins: str = "http://localhost:3000,http://localhost:3001"
 
 
 @lru_cache

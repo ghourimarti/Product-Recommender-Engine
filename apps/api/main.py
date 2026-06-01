@@ -15,6 +15,7 @@ from functools import lru_cache
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from starlette.requests import Request
@@ -124,6 +125,13 @@ def _sse(event: str, data: dict[str, Any]) -> str:
 
 
 app = FastAPI(title="P2 Product Recommender", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in get_settings().cors_origins.split(",") if o.strip()],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.middleware("http")
