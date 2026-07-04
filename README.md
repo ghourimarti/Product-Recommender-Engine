@@ -43,5 +43,3 @@ demo/   old/   Prompts/           # reference / archive / source docs (not modif
 > Note: the build-spec refers to the eval package conceptually as `eval`; the
 > importable Python package is named **`evaluation`** to avoid shadowing the
 > Python builtin `eval`. Makefile targets remain `eval-ranking` / `eval-rag`.
-> 
-> 
