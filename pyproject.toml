@@ -11,6 +11,12 @@ dependencies = [
     "langchain-qdrant>=0.2",
     "langchain-groq>=0.2",
     "langchain-anthropic>=0.2",
+    # `langchain` (the meta-package) is required by `langfuse.callback.CallbackHandler`
+    # — it hard-imports `langchain.callbacks.base`. Without it, get_langchain_callbacks()
+    # silently returns [], LLM calls run un-instrumented, and the Langfuse UI stays on
+    # the "log your first trace" screen. `langchain>=0.3` is compatible with
+    # `langchain-core>=0.3` so this doesn't touch the RAGAS/Vertex conflict below.
+    "langchain>=0.3,<0.4",
     "qdrant-client>=1.12,<1.13",  # pinned to match the v1.12.4 server image
     "fastembed>=0.4",
     "fastapi>=0.115",

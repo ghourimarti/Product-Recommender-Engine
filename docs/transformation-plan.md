@@ -32,7 +32,7 @@ Every step ends with the system in a **working, runnable state** and adds its ow
 
 ### Step 3 — Qdrant + embeddings + hybrid retrieval
 - **Goal:** Index products in Qdrant and retrieve by hybrid (dense + sparse).
-- **Changes:** `infra/compose/docker-compose.yml` (Qdrant service); `packages/retrieval/` (OpenAI `text-embedding-3-small`@1536 via `langchain-openai`; `QdrantVectorStore`; dense+sparse named vectors; hybrid query; `VectorStore` interface for reversibility).
+- **Changes:** `infra/compose/docker-compose.yml` (Qdrant service — since split into `docker-compose.data.yml`); `packages/retrieval/` (OpenAI `text-embedding-3-small`@1536 via `langchain-openai`; `QdrantVectorStore`; dense+sparse named vectors; hybrid query; `VectorStore` interface for reversibility).
 - **Tests:** integration test against **real Qdrant in Docker** with **real embeddings** (keys available) — sample queries return topically-correct products.
 - **Verify:** `docker compose up qdrant`, run the index script, run the retrieval test; eyeball top-k for 5 sample queries.
 - **Implements:** D2, D5, D3. **Risk:** **High** (new tech + real embeddings). **DoD:** hybrid retrieval returns sensible products; embeddings versioned in the collection.

@@ -1,0 +1,68 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# OBSERVABILITY  (standalone tier — can run without app or data)
+#
+#   • Jaeger        — distributed traces (OTLP receiver on 4317)
+#   • Prometheus    — scrapes the API's /metrics endpoint
+#   • Grafana       — dashboards over Prometheus (empty; log in admin/admin)
+#   • RedisInsight  — GUI for Redis
+#
+# Skipped intentionally: **Langfuse self-host**. It needs its own Postgres +
+# ClickHouse to run properly; adding it silently would be risky. Port slot 2008
+# is still reserved in .env — set the LANGFUSE_HOST/keys there to send traces
+# to Langfuse Cloud or a manually-started self-host instance.
+#
+# Same `name:` as the other tiers → shared project network. Prometheus and
+# RedisInsight expect to find `api` and `redis` containers by name; if you run
+# obs alone, their scrape targets are simply down until you `make app`/`make db`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: p2-recommender
+
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    container_name: p2-jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "${JAEGER_UI_PORT:-2006}:16686"      # Jaeger UI
+      - "${OTEL_OTLP_GRPC_PORT:-2007}:4317"  # OTLP gRPC receiver
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: p2-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-2009}:9090"
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: p2-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-2010}:3000"
+    depends_on:
+      - prometheus
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: p2-redisinsight
+    volumes:
+      - redisinsight_data:/data
+    ports:
+      - "${REDISINSIGHT_PORT:-2005}:5540"
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  redisinsight_data:

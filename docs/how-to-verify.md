@@ -51,12 +51,12 @@ Expect: `reviews=450 products=9 errors=0`. Open `docs/data-report.md` to see per
 
 ### Step 3 — Qdrant + embeddings + hybrid retrieval  *(needs OPENAI_API_KEY + Docker)*
 ```bash
-docker compose -f infra/compose/docker-compose.yml up -d      # start Qdrant  (make up)
+make db                                                       # start Qdrant + Redis + DynamoDB
 uv run python -m retrieval.index                              # index 9 products
 uv run pytest -q tests/integration/test_retrieval.py          # real-services test (3 passed)
 ```
-Health check: open http://localhost:6333/healthz (expect HTTP 200).
-Stop Qdrant when done: `docker compose -f infra/compose/docker-compose.yml down` (`make down`).
+Health check: open http://localhost:2001/healthz (expect HTTP 200).
+Stop Qdrant when done: `make down` (`make down`).
 
 ### Step 4 — Recommender ranking core  *(pure logic; no services needed for tests)*
 ```bash
@@ -80,7 +80,7 @@ PY
 
 ### Step 5 — Ranking eval baseline (go/no-go gate)  *(needs OPENAI_API_KEY + Docker)*
 ```bash
-docker compose -f infra/compose/docker-compose.yml up -d   # Qdrant
+make db                                                    # Qdrant + Redis + DynamoDB (data tier)
 uv run python -m evaluation.ranking.run                    # writes docs/eval-baseline.md  (make eval-ranking)
 uv run pytest -q tests/unit/test_ranking_metrics.py        # metric correctness (8 tests)
 ```
@@ -89,7 +89,7 @@ for the per-query and per-tier (attribute vs semantic) breakdown.
 
 ### Step 6 — LangChain RAG chain (grounded explanations)  *(needs an LLM key + Docker)*
 ```bash
-docker compose -f infra/compose/docker-compose.yml up -d   # Qdrant
+make db                                                    # Qdrant + Redis + DynamoDB (data tier)
 uv run python -m retrieval.index                           # ensure catalog indexed
 uv run pytest -q tests/unit/test_chat_merge.py             # merge + provider-selection (6 tests)
 uv run pytest -q tests/integration/test_chat.py            # real-LLM end-to-end chat
@@ -113,7 +113,7 @@ product facts.
 
 ### Step 7 — Answer-quality eval (custom LLM judge)  *(needs OPENAI_API_KEY + Docker)*
 ```bash
-docker compose -f infra/compose/docker-compose.yml up -d   # Qdrant
+make db                                                    # Qdrant + Redis + DynamoDB (data tier)
 uv run python -m evaluation.ragas.run                      # make eval-rag -> docs/answer-quality-baseline.md
 uv run pytest -q tests/unit/test_ragas_format.py           # format/judge-schema (4 tests)
 ```
@@ -124,7 +124,7 @@ equivalent custom LLM-judge harness — see the baseline file's methodology sect
 
 ### Step 8 — FastAPI + DynamoDB chat history (SSE)  *(needs Docker: Qdrant + DynamoDB-local)*
 ```bash
-docker compose -f infra/compose/docker-compose.yml up -d   # Qdrant + DynamoDB-local
+make db                                                    # Qdrant + Redis + DynamoDB (data tier) + DynamoDB-local
 uv run python -m retrieval.index                           # ensure catalog indexed
 uv run pytest -q tests/unit/test_api_health.py \
                tests/integration/test_history.py \
@@ -133,22 +133,22 @@ uv run pytest -q tests/unit/test_api_health.py \
 `test_history.py::test_per_user_isolation` proves the fix for the demo's shared-session bug.
 Run the API and hit it:
 ```bash
-make serve     # uv run uvicorn api.main:app --app-dir apps --port 8080 --reload
-curl http://localhost:8080/health
-curl -X POST http://localhost:8080/recommend -H "Content-Type: application/json" -d "{\"query\":\"good bass headphones\",\"k\":3}"
-curl -N -X POST http://localhost:8080/chat -H "Content-Type: application/json" -d "{\"query\":\"good bass headphones\",\"session_id\":\"s1\",\"user_id\":\"alice\",\"k\":2}"
-curl http://localhost:8080/metrics | findstr http_requests_total
+make serve     # uv run uvicorn api.main:app --app-dir apps --port 2011 --reload
+curl http://localhost:2011/health
+curl -X POST http://localhost:2011/recommend -H "Content-Type: application/json" -d "{\"query\":\"good bass headphones\",\"k\":3}"
+curl -N -X POST http://localhost:2011/chat -H "Content-Type: application/json" -d "{\"query\":\"good bass headphones\",\"session_id\":\"s1\",\"user_id\":\"alice\",\"k\":2}"
+curl http://localhost:2011/metrics | findstr http_requests_total
 ```
 
 ### Step 9 — 4-layer caching  *(needs Docker: Qdrant + Redis)*
 ```bash
-docker compose -f infra/compose/docker-compose.yml up -d   # Qdrant + Redis + DynamoDB-local
+make db                                                    # Qdrant + Redis + DynamoDB (data tier) + Redis + DynamoDB-local
 uv run pytest -q tests/unit/test_cache.py tests/integration/test_cache_integration.py
 ```
 Live: call `/recommend` twice with the same query — the 2nd is served from cache. Confirm via
 metrics:
 ```bash
-curl http://localhost:8080/metrics | findstr cache_hits_total
+curl http://localhost:2011/metrics | findstr cache_hits_total
 ```
 Layers: L0 in-proc version memo · L1 Redis embedding cache · L2 Qdrant semantic cache
 (near-duplicate queries) · L3 Redis exact response cache. Bumping `catalog:version` invalidates
@@ -163,19 +163,19 @@ Live (mint a dev token; works because CLERK_JWKS_URL is unset -> HS256 dev mode)
 ```powershell
 make serve   # in another shell
 $tok = uv run python -c "from core.auth import mint_dev_token; print(mint_dev_token('alice'))"
-curl http://localhost:8080/recommend -X POST -H "Content-Type: application/json" -d "{\"query\":\"bass\",\"k\":2}"            # 401 (no token)
-curl http://localhost:8080/recommend -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" -d "{\"query\":\"bass\",\"k\":2}"   # 200
+curl http://localhost:2011/recommend -X POST -H "Content-Type: application/json" -d "{\"query\":\"bass\",\"k\":2}"            # 401 (no token)
+curl http://localhost:2011/recommend -X POST -H "Authorization: Bearer $tok" -H "Content-Type: application/json" -d "{\"query\":\"bass\",\"k\":2}"   # 200
 ```
 With a real Clerk instance, set `CLERK_JWKS_URL` in `.env` and send Clerk-issued tokens instead.
 Rate limit: 30/min + 500/day per user -> 429 with `Retry-After`.
 
 ### Step 11 — Observability (OTel traces + Langfuse)  *(needs Docker: Jaeger)*
 ```bash
-docker compose -f infra/compose/docker-compose.yml up -d    # includes Jaeger (UI :16686, OTLP :4317)
+make obs                                                    # obs tier: Jaeger UI :2006, OTLP :2007
 uv run pytest -q tests/unit/test_observability.py
 ```
-See traces end-to-end: set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317` in `.env`, then
-`make serve` and hit the API — open the **Jaeger UI at http://localhost:16686** (service
+See traces end-to-end: set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:2007` in `.env`, then
+`make serve` and hit the API — open the **Jaeger UI at http://localhost:2006** (service
 `p2-recommender`). For LLM token/cost traces, set `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`
 (Langfuse Cloud free tier or self-host) + `LANGFUSE_HOST`. Both degrade gracefully if unset.
 
@@ -213,9 +213,9 @@ Run + verify visually:
 ```bash
 # 1) API up:  make serve   (repo root)
 # 2) apps/web/.env.local:
-#      NEXT_PUBLIC_API_URL=http://localhost:8080
+#      NEXT_PUBLIC_API_URL=http://localhost:2011
 #      NEXT_PUBLIC_DEV_TOKEN=<from: uv run python -c "from core.auth import mint_dev_token; print(mint_dev_token('web'))">
-# 3) start UI:  cd apps/web ; node node_modules/next/dist/bin/next dev   # http://localhost:3000
+# 3) start UI:  cd apps/web ; node node_modules/next/dist/bin/next dev   # http://localhost:2012
 ```
 In the browser: enter "good bass earphones for the gym" -> cards appear first, then the
 explanation streams token-by-token; "Stop" cancels. Dev token locally; Clerk is the production
@@ -223,14 +223,19 @@ auth layer.
 
 ### Step 15 — Dockerize + compose parity  *(Docker)*
 ```bash
-docker compose -f infra/compose/docker-compose.yml config     # validate full stack (6 services)
+docker compose \
+  -f infra/compose/docker-compose.data.yml \
+  -f infra/compose/docker-compose.app.yml \
+  -f infra/compose/docker-compose.observability.yml \
+  config                                                      # validate full stack (9 services)
 docker build -f apps/api/Dockerfile -t p2-api .               # multi-stage, non-root API image
-docker run --rm -p 8080:8080 p2-api                           # curl http://localhost:8080/health -> {"status":"ok"}
+docker run --rm -p 2011:2011 p2-api                           # curl http://localhost:2011/health -> {"status":"ok"}
 ```
 Whole stack in one command (needs `.env` with API keys at repo root):
 ```bash
-docker compose -f infra/compose/docker-compose.yml up -d --build
-# api :8080 · web :3000 · qdrant :6333 · redis :6379 · dynamodb :8000 · jaeger :16686
+make full
+# api :2011 · web :2012 · qdrant :2001 · redis :2004 · dynamodb :2003 ·
+# jaeger :2006 · prometheus :2009 · grafana :2010 · redisinsight :2005
 ```
 Images run as non-root (uid 10001). Note: the API image is ~725MB (fastembed/onnxruntime +
 langchain) — slimming is a hardening item (Phase 5).
@@ -285,7 +290,7 @@ containers) -> **eval-gate** (blocks merge if NDCG@3/MRR fall > 0.05 below `base
 ## Full regression sweep — verify ALL steps at once
 
 ```bash
-docker compose -f infra/compose/docker-compose.yml up -d     # Qdrant + DynamoDB-local
+make db                                                      # data tier: Qdrant + DynamoDB-local + Redis
 uv sync                                                       # env in sync
 
 # gates (Steps 1-8 code/logic) -> expect: all checks passed / no issues / 47 passed

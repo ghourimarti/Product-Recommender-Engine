@@ -1,11 +1,12 @@
 """Integration test: real Qdrant + real OpenAI embeddings (Step 3).
 
-Skips unless OPENAI_API_KEY is set and Qdrant is reachable on localhost:6333.
+Skips unless OPENAI_API_KEY is set and Qdrant is reachable at QDRANT_URL.
 """
 
 from __future__ import annotations
 
 import socket
+from urllib.parse import urlparse
 
 import pytest
 
@@ -23,10 +24,13 @@ QUERIES = [
 
 
 def _qdrant_reachable() -> bool:
+    # Env-driven: whatever QDRANT_URL points at (default 2001 per .env.example).
+    parsed = urlparse(get_settings().qdrant_url)
+    host, port = parsed.hostname or "localhost", parsed.port or 2001
     sock = socket.socket()
     sock.settimeout(1.0)
     try:
-        sock.connect(("localhost", 6333))
+        sock.connect((host, port))
         return True
     except OSError:
         return False
@@ -39,7 +43,7 @@ def indexed_store() -> QdrantHybridStore:
     if not get_settings().openai_api_key:
         pytest.skip("OPENAI_API_KEY not set")
     if not _qdrant_reachable():
-        pytest.skip("Qdrant not reachable on localhost:6333")
+        pytest.skip(f"Qdrant not reachable at {get_settings().qdrant_url}")
     store = QdrantHybridStore()
     store.index(load_catalog())
     return store

@@ -6,6 +6,7 @@ Skips unless an LLM key is configured and Qdrant is reachable.
 from __future__ import annotations
 
 import socket
+from urllib.parse import urlparse
 
 import pytest
 
@@ -19,10 +20,14 @@ pytestmark = pytest.mark.integration
 
 
 def _qdrant_reachable() -> bool:
+    # Probe whatever host:port QDRANT_URL points at — port scheme is env-driven
+    # (2001 by default in .env; still works if you override it).
+    parsed = urlparse(get_settings().qdrant_url)
+    host, port = parsed.hostname or "localhost", parsed.port or 2001
     sock = socket.socket()
     sock.settimeout(1.0)
     try:
-        sock.connect(("localhost", 6333))
+        sock.connect((host, port))
         return True
     except OSError:
         return False
@@ -35,7 +40,7 @@ def store() -> QdrantHybridStore:
     if not available_providers(get_settings()):
         pytest.skip("no LLM provider key configured")
     if not _qdrant_reachable():
-        pytest.skip("Qdrant not reachable on localhost:6333")
+        pytest.skip(f"Qdrant not reachable at {get_settings().qdrant_url}")
     s = QdrantHybridStore()
     s.index(load_catalog())
     return s

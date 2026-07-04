@@ -1,0 +1,70 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# TIER 2 — APP  (start after data tier is up)
+#
+# The two application containers: FastAPI backend + Next.js frontend. Overlays
+# the data tier (`make app` = data + app). The api reaches qdrant/redis/dynamo
+# by container name on the shared project network. It reaches jaeger the same
+# way IF the observability tier is also up — if not, OTel spans are dropped
+# silently (no error), which is the correct dev-time behaviour.
+#
+# NOTE: no cross-file depends_on. jaeger lives in docker-compose.observability.yml;
+# referencing it here would fail parse when running only data+app.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: p2-recommender
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+      args:
+        API_PORT: ${API_PORT:-2011}
+    container_name: p2-api
+    env_file:
+      - ../../.env          # API keys (OpenAI/Groq/etc.) + everything else
+    environment:
+      # Container-to-container URLs: service name + INTERNAL image ports.
+      # These override anything in .env, so host-side URLs (localhost:2001 etc.)
+      # don't leak into the container network.
+      QDRANT_URL: http://qdrant:6333
+      REDIS_URL: redis://redis:6379/0
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      # Langfuse: point at the container name when the langfuse tier is up
+      # (`make langfuse` / `make full`). If langfuse isn't running, the SDK
+      # degrades silently — no error surfaced to callers.
+      LANGFUSE_HOST: http://langfuse-web:3000
+      API_PORT: ${API_PORT:-2011}
+    ports:
+      - "${API_PORT:-2011}:${API_PORT:-2011}"
+    depends_on:
+      - qdrant
+      - redis
+      - dynamodb
+
+  web:
+    build:
+      context: ../../apps/web
+      dockerfile: Dockerfile
+      args:
+        # Public config baked into the client bundle at build time. Values come
+        # from the root .env; `:-` provides fallbacks so the build succeeds with
+        # a bare .env too.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:2011}
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk}
+        # Dev bypass token — only baked in when NEXT_PUBLIC_DEV_TOKEN is EXPLICITLY set in .env.
+        # Real Clerk auth (RS256) is the default; the real Clerk session token takes precedence
+        # in api.ts, so leaving this empty is the correct choice for production-like local dev.
+        NEXT_PUBLIC_DEV_TOKEN: ${NEXT_PUBLIC_DEV_TOKEN:-}
+        WEB_PORT: ${WEB_PORT:-2012}
+    container_name: p2-web
+    environment:
+      # Server-side secret for Clerk middleware (runtime, never baked into bundle).
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-sk_test_dummy}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk}
+      WEB_PORT: ${WEB_PORT:-2012}
+    ports:
+      - "${WEB_PORT:-2012}:${WEB_PORT:-2012}"
+    depends_on:
+      - api

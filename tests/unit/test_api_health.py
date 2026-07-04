@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from api.main import app
+from core.config import get_settings
 
 client = TestClient(app)
 
@@ -30,5 +31,8 @@ def test_recommend_requires_auth() -> None:
 
 def test_cors_allows_frontend_origin() -> None:
     # Browser at the Next.js origin must be allowed cross-origin (Decision 18).
-    response = client.get("/health", headers={"Origin": "http://localhost:3000"})
-    assert response.headers.get("access-control-allow-origin") == "http://localhost:3000"
+    # Origin is env-driven (see CORS_ORIGINS in .env / .env.example — first entry
+    # is the web frontend, default http://localhost:2012).
+    origin = get_settings().cors_origins.split(",")[0].strip()
+    response = client.get("/health", headers={"Origin": origin})
+    assert response.headers.get("access-control-allow-origin") == origin

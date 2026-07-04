@@ -98,8 +98,15 @@ def _breaker() -> CircuitBreaker:
 
 
 def require_user(authorization: str | None = Header(default=None)) -> str:
-    """Authenticated user id from the Bearer JWT (Decision 9)."""
+    """Authenticated user id from the Bearer JWT (Decision 9).
+
+    In dev mode (no clerk_jwks_url set), unauthenticated requests get a default
+    dev-user identity so the frontend works without a token in .env.local.
+    """
+    settings = get_settings()
     if not authorization or not authorization.startswith("Bearer "):
+        if not settings.clerk_jwks_url:
+            return "dev-user"
         raise HTTPException(status_code=401, detail="missing bearer token")
     try:
         return user_id_from_token(authorization.split(" ", 1)[1])

@@ -8,7 +8,9 @@ api:
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 2
-  port: 8080
+  # Matches the container's EXPOSE (env-driven — see apps/api/Dockerfile + .env).
+  # If you change API_PORT in .env, update this to match.
+  port: 2011
   resources:
     requests:
       cpu: 250m
@@ -17,9 +19,12 @@ api:
       cpu: "1"
       memory: 1Gi
   env:
+    # Cluster-internal URLs use k8s Service names on their INTERNAL ports
+    # (Qdrant image speaks 6333, Redis speaks 6379 — those don't change).
     QDRANT_URL: http://qdrant:6333
     REDIS_URL: redis://redis:6379/0
     OTEL_EXPORTER_OTLP_ENDPOINT: ""
+    API_PORT: "2011"
   autoscaling:
     enabled: true
     minReplicas: 2
@@ -36,7 +41,8 @@ web:
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 2
-  port: 3000
+  # Matches the container's EXPOSE (env-driven — see apps/web/Dockerfile + .env).
+  port: 2012
   resources:
     requests:
       cpu: 100m
@@ -45,6 +51,9 @@ web:
       cpu: 500m
       memory: 512Mi
 
+# NOTE: qdrant.port / redis.port are the ports the IMAGES speak inside the pod
+# (Qdrant → 6333, Redis → 6379). These are the image contract, not host ports —
+# leave them on their well-known values. Host-side ports live in .env.
 qdrant:
   image:
     repository: qdrant/qdrant

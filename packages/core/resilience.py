@@ -29,5 +29,7 @@ class CircuitBreaker:
 
     def record_failure(self) -> None:
         self._failures += 1
-        if self._failures >= self.fail_max:
+        # Only (re-)open if currently closed or half-open; don't reset the timer
+        # while the breaker is already fully open.
+        if self._failures >= self.fail_max and not self.is_open():
             self._opened_at = time.monotonic()

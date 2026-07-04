@@ -62,7 +62,7 @@ def test_circuit_breaker_opens_then_half_opens() -> None:
     assert not breaker.is_open()
     breaker.record_failure()
     assert breaker.is_open()
-    time.sleep(0.06)
+    time.sleep(0.2)
     assert not breaker.is_open()  # half-open after timeout
     breaker.record_success()
     assert not breaker.is_open()

@@ -6,6 +6,7 @@ Skips unless the required services/keys are present.
 from __future__ import annotations
 
 import socket
+from urllib.parse import urlparse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -20,11 +21,14 @@ from retrieval.store import QdrantHybridStore
 pytestmark = pytest.mark.integration
 
 
-def _reachable(port: int) -> bool:
+def _reachable_url(url: str, default_port: int) -> bool:
+    """Probe host:port derived from a URL — env-driven (see .env.example port scheme)."""
+    parsed = urlparse(url)
+    host, port = parsed.hostname or "localhost", parsed.port or default_port
     sock = socket.socket()
     sock.settimeout(1.0)
     try:
-        sock.connect(("localhost", port))
+        sock.connect((host, port))
         return True
     except OSError:
         return False
@@ -38,13 +42,14 @@ def _auth() -> dict[str, str]:
 
 @pytest.fixture(scope="module")
 def client() -> TestClient:
-    if not _reachable(6333):
-        pytest.skip("Qdrant not reachable on localhost:6333")
-    if not _reachable(6379):
+    s = get_settings()
+    if not _reachable_url(s.qdrant_url, default_port=2001):
+        pytest.skip(f"Qdrant not reachable at {s.qdrant_url}")
+    if not _reachable_url(s.redis_url, default_port=2004):
         pytest.skip("Redis not reachable (rate limiter)")
-    if not get_settings().openai_api_key:
+    if not s.openai_api_key:
         pytest.skip("OPENAI_API_KEY not set (embeddings)")
-    if get_settings().clerk_jwks_url:
+    if s.clerk_jwks_url:
         pytest.skip("Clerk JWKS configured; dev tokens not valid")
     QdrantHybridStore().index(load_catalog())  # ensure the collection exists for the API
     return TestClient(app)
@@ -64,8 +69,8 @@ def test_recommend_endpoint(client: TestClient) -> None:
 def test_chat_sse_stream(client: TestClient) -> None:
     if not available_providers(get_settings()):
         pytest.skip("no LLM provider key")
-    if not _reachable(8000):
-        pytest.skip("DynamoDB-local not reachable on localhost:8000")
+    if not _reachable_url(get_settings().dynamodb_endpoint, default_port=2003):
+        pytest.skip(f"DynamoDB-local not reachable at {get_settings().dynamodb_endpoint}")
     response = client.post(
         "/chat",
         json={"query": "good bass headphones", "session_id": "t", "k": 3},

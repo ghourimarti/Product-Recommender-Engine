@@ -1,0 +1,19 @@
+# Prometheus scrape config for the local P2 stack.
+#
+# Targets use CONTAINER NAMES on the shared project network (`p2-recommender`).
+# The port 2011 must match API_PORT in .env — if you change API_PORT, update
+# both this file and the api service (they'd otherwise disagree).
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'p2-api'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['api:2011']

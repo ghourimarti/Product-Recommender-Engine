@@ -1,5 +1,5 @@
 // k6 load test for the /recommend path (Decision 10/12 scaling targets).
-// Run:  API_URL=http://localhost:8080 TOKEN=<dev jwt> k6 run ops/load/k6-recommend.js
+// Run:  API_URL=http://localhost:2011 TOKEN=<dev jwt> k6 run ops/load/k6-recommend.js
 //
 // Target NFRs (docs/decision-log.md): ranking-only p95 < 300ms; cache hit-rate makes this
 // achievable at ~200 RPS. Adjust stages/thresholds to the environment under test.
@@ -7,7 +7,7 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
 
-const API_URL = __ENV.API_URL || "http://localhost:8080";
+const API_URL = __ENV.API_URL || "http://localhost:2011";
 const TOKEN = __ENV.TOKEN || "";
 
 const QUERIES = [

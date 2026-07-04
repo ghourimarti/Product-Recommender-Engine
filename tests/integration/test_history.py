@@ -1,23 +1,28 @@
 """Integration test: DynamoDB chat history per-user isolation + persistence (Step 8).
 
-Skips unless DynamoDB-local is reachable on localhost:8000.
+Skips unless DynamoDB-local is reachable at DYNAMODB_ENDPOINT.
 """
 
 from __future__ import annotations
 
 import socket
 import uuid
+from urllib.parse import urlparse
 
 import pytest
 
+from core.config import get_settings
 from core.history import DynamoChatHistory
 
 
 def _dynamo_reachable() -> bool:
+    # Env-driven: whatever DYNAMODB_ENDPOINT points at (default 2003 per .env.example).
+    parsed = urlparse(get_settings().dynamodb_endpoint)
+    host, port = parsed.hostname or "localhost", parsed.port or 2003
     sock = socket.socket()
     sock.settimeout(1.0)
     try:
-        sock.connect(("localhost", 8000))
+        sock.connect((host, port))
         return True
     except OSError:
         return False
@@ -28,7 +33,7 @@ def _dynamo_reachable() -> bool:
 @pytest.fixture(scope="module")
 def history() -> DynamoChatHistory:
     if not _dynamo_reachable():
-        pytest.skip("DynamoDB-local not reachable on localhost:8000")
+        pytest.skip(f"DynamoDB-local not reachable at {get_settings().dynamodb_endpoint}")
     store = DynamoChatHistory()
     store.ensure_table()
     return store

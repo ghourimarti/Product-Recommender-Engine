@@ -1,0 +1,43 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# TIER 1 — DATA  (start first)
+#
+# Everything the API/eval scripts read from or write to: vector DB, chat history,
+# cache. Named volumes are declared here so `make downv` sees them.
+#
+# Same `name:` as the other two compose files → all tiers share ONE docker
+# project + network. Bring them up in any order; api reaches jaeger and vice
+# versa by container name.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: p2-recommender
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: p2-qdrant
+    ports:
+      - "${QDRANT_HTTP_PORT:-2001}:6333"  # HTTP/REST
+      - "${QDRANT_GRPC_PORT:-2002}:6334"  # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dynamodb:
+    image: amazon/dynamodb-local:2.5.2
+    container_name: p2-dynamodb
+    command: "-jar DynamoDBLocal.jar -inMemory -sharedDb"
+    ports:
+      - "${DYNAMODB_PORT:-2003}:8000"
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: p2-redis
+    ports:
+      - "${REDIS_PORT:-2004}:6379"
+
+volumes:
+  qdrant_data:
