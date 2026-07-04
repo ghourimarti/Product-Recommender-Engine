@@ -9,3 +9,5 @@ repos:
     rev: v8.21.2
     hooks:
       - id: gitleaks
+
+
