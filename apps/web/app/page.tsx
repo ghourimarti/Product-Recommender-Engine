@@ -209,12 +209,12 @@ export default function LandingPage() {
   function handleHeroSearch() {
     const q = heroQuery.trim();
     if (!q) return;
-    router.push(`/search?q=${encodeURIComponent(q)}`);
+    router.push(`/dashboard/discover?q=${encodeURIComponent(q)}`);
   }
 
   return (
     <div className="min-h-screen bg-bg-base text-txt-primary">
-      <Navbar variant="landing" />
+      <Navbar />
 
       {/* ══ HERO ═══════════════════════════════════════════════════════════ */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
@@ -474,7 +474,7 @@ export default function LandingPage() {
                 transition={{ duration: 0.35, delay: i * 0.06 }}
               >
                 <Link
-                  href={`/search?q=${encodeURIComponent(cat.q)}`}
+                  href={`/dashboard/discover?q=${encodeURIComponent(cat.q)}`}
                   className="glass-card p-5 flex items-center gap-4
                              hover:border-accent/40 transition-all duration-200 group block"
                 >
@@ -554,11 +554,11 @@ export default function LandingPage() {
                 </ul>
 
                 {plan.ctaVariant === "primary" ? (
-                  <SignUpButton mode="modal" forceRedirectUrl="/search">
+                  <SignUpButton mode="modal" forceRedirectUrl="/dashboard">
                     <button className="btn-primary py-3 w-full text-sm">{plan.cta}</button>
                   </SignUpButton>
                 ) : (
-                  <SignUpButton mode="modal" forceRedirectUrl="/search">
+                  <SignUpButton mode="modal" forceRedirectUrl="/dashboard">
                     <button className="btn-secondary py-3 w-full text-sm">{plan.cta}</button>
                   </SignUpButton>
                 )}
@@ -626,19 +626,19 @@ export default function LandingPage() {
               Start with 100 free queries per day. No credit card required.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <SignUpButton mode="modal" forceRedirectUrl="/search">
+              <SignUpButton mode="modal" forceRedirectUrl="/dashboard">
                 <button className="btn-primary px-8 py-3.5 text-base">
                   Start Free
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </SignUpButton>
-              <SignInButton mode="modal" forceRedirectUrl="/search">
+              <SignInButton mode="modal" forceRedirectUrl="/dashboard">
                 <button className="btn-secondary px-8 py-3.5 text-base">Sign In</button>
               </SignInButton>
             </div>
             <p className="text-txt-muted text-sm mt-5">
               Already exploring?{" "}
-              <Link href="/search" className="text-accent hover:underline">
+              <Link href="/dashboard" className="text-accent hover:underline">
                 Open the app →
               </Link>
             </p>

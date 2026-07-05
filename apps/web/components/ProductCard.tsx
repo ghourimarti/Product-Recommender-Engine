@@ -133,17 +133,49 @@ export function ProductCard({
         )}
       </div>
 
+      {/* price + store (live aggregator offers) */}
+      {(product.price != null || product.store) && (
+        <div className="flex items-center gap-2 mb-3">
+          {product.price != null && (
+            <span className="font-semibold text-txt-primary">
+              {(product.currency === "USD" || !product.currency) ? "$" : ""}
+              {product.price.toLocaleString()}
+            </span>
+          )}
+          {product.store && (
+            <span className="text-xs px-2 py-0.5 rounded-full border border-bg-border
+                             text-txt-secondary bg-bg-elevated">
+              {product.store}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* relevance bar */}
       <RelevanceBar score={product.final_score} />
 
+      {/* AI reason (grounded) */}
+      {product.reason && (
+        <p className="mt-3 text-sm text-txt-secondary leading-relaxed">{product.reason}</p>
+      )}
+
       {/* footer */}
-      <div className="mt-3 pt-3 border-t border-bg-border flex items-center justify-between">
-        <span className="font-mono text-xs text-txt-muted">
+      <div className="mt-3 pt-3 border-t border-bg-border flex items-center justify-between gap-2">
+        <span className="font-mono text-xs text-txt-muted truncate">
           {product.product_id.slice(0, 10)}…
         </span>
-        <span className="text-xs text-accent cursor-default select-none">
-          See analysis →
-        </span>
+        {product.product_url ? (
+          <a
+            href={product.product_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-primary px-3 py-1.5 text-xs shrink-0"
+          >
+            Buy{product.store ? ` on ${product.store}` : ""} →
+          </a>
+        ) : (
+          <span className="text-xs text-accent cursor-default select-none">See analysis →</span>
+        )}
       </div>
     </motion.article>
   );

@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     # Security + cost controls (Decisions 18, 20).
     llm_enabled: bool = True  # kill-switch: false -> serve cached recs, skip LLM explanations
     max_output_tokens: int = 600
+
+    # Live shopping source: SerpApi (Google Shopping). Aggregator data + buy links.
+    serpapi_api_key: str = ""
+    serpapi_gl: str = "us"  # country
+    serpapi_hl: str = "en"  # language
     # CORS allow-list for the browser frontend (Decision 18: locked to known origins).
     # 2012 = web port, 2011 = api port (self-origin for /health probes, etc.).
     cors_origins: str = "http://localhost:2012,http://localhost:2011"

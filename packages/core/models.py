@@ -114,6 +114,47 @@ class ChatResponse(BaseModel):
     no_match: bool
 
 
+class Offer(BaseModel):
+    """A live product offer from a shopping source (SerpApi/Google Shopping).
+
+    This is the aggregator's unit: a real product with a price, the store selling it, and a
+    buy link the user can click through to. Reviews from Google Shopping are summarized as a
+    rating + review_count (+ optional snippet); full review text is a paid per-product add-on.
+    """
+
+    product_id: str
+    title: str
+    price: float | None = None
+    currency: str = "USD"
+    store: str = ""  # merchant / seller (e.g. "Amazon.com")
+    product_url: str = ""  # buy / click-through link
+    thumbnail: str | None = None
+    rating: float | None = None
+    review_count: int = 0
+    snippet: str = ""
+    position: int = 0  # source result rank
+
+
+class RankedOffer(BaseModel):
+    """A live offer after rating-aware ranking, with score components + the LLM reason."""
+
+    offer: Offer
+    final_score: float
+    relevance_score: float  # from source result position
+    rating_score: float  # normalized rating (1->0, 5->1)
+    volume_confidence: float  # review_count saturating multiplier
+    reason: str = ""  # LLM-authored grounded reason (filled after explanation)
+
+
+class AggregatorResult(BaseModel):
+    """The end-to-end aggregator result: ranked live offers (with buy links) + no-match flag."""
+
+    query: str
+    summary: str = ""  # one-line overall summary (for the AI panel)
+    offers: list[RankedOffer]
+    no_match: bool
+
+
 class RecommendRequest(BaseModel):
     """POST /recommend body — ranking-only (no LLM explanation)."""
 

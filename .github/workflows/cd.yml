@@ -1,0 +1,56 @@
+name: CD
+
+# Skeleton deploy (Decision 16): OIDC -> AWS -> build/push to ECR -> Helm deploy to EKS.
+# Requires configured GitHub secrets + an AWS OIDC role; does nothing without them.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC to AWS (no long-lived keys)
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & push API image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          docker build -f apps/api/Dockerfile -t "$REGISTRY/p2-api:${{ github.sha }}" .
+          docker push "$REGISTRY/p2-api:${{ github.sha }}"
+
+      - name: Build & push web image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          docker build -f apps/web/Dockerfile -t "$REGISTRY/p2-web:${{ github.sha }}" apps/web
+          docker push "$REGISTRY/p2-web:${{ github.sha }}"
+
+      - name: Deploy to EKS via Helm
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          aws eks update-kubeconfig --name p2-recommender-prod-eks --region us-east-1
+          helm upgrade --install p2 ops/helm/p2-recommender \
+            --namespace p2 --create-namespace \
+            --set api.image.repository="$REGISTRY/p2-api" \
+            --set api.image.tag=${{ github.sha }} \
+            --set web.image.repository="$REGISTRY/p2-web" \
+            --set web.image.tag=${{ github.sha }} \
+            --wait --atomic

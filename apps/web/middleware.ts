@@ -1,6 +1,8 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-const isProtected = createRouteMatcher(["/search(.*)"]);
+// The whole app surface lives under /dashboard and is auth-gated.
+// Marketing pages (/, /features, /pricing, /about, /contact, /blog, legal) stay public.
+const isProtected = createRouteMatcher(["/dashboard(.*)"]);
 
 export default clerkMiddleware(async (auth, req) => {
   if (isProtected(req)) {

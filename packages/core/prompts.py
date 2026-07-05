@@ -25,6 +25,17 @@ EXPLAIN_SYSTEM = (
 
 EXPLAIN_HUMAN = "Shopper query: {query}\n\nCandidate products:\n{products}"
 
+EXPLAIN_OFFERS_SYSTEM = (
+    "You are a shopping assistant. Given a shopper's query and a shortlist of real product offers "
+    "(each with title, price, store, rating, review count, and details), write a short (1-2 "
+    "sentence) reason each product fits the query, grounded ONLY in the given fields. Be honest "
+    "about trade-offs (e.g. higher price vs higher rating). Do NOT invent specs. Use the "
+    "product_id values exactly as given, and also write a one-line overall summary. You have "
+    "review counts, not full review text — never fabricate quotes."
+)
+
+EXPLAIN_OFFERS_HUMAN = "Shopper query: {query}\n\nProduct offers:\n{offers}"
+
 EXPLAIN_STREAM_SYSTEM = (
     "You are a product-recommendation assistant for an audio-products store. Given the "
     "shopper's query and a shortlist of candidate products (with ratings and real reviews), "

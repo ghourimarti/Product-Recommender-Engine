@@ -4,15 +4,33 @@ import { Zap } from "lucide-react";
 const COLS = [
   {
     heading: "Product",
-    links: ["Features", "Pricing", "API Docs", "Status", "Changelog"],
+    links: [
+      { label: "Features", href: "/features" },
+      { label: "Pricing",  href: "/pricing" },
+      { label: "Discover", href: "/dashboard/discover" },
+      { label: "Dashboard", href: "/dashboard" },
+      { label: "Status",   href: "#" },
+    ],
   },
   {
     heading: "Company",
-    links: ["About", "Blog", "Careers", "Contact", "Press Kit"],
+    links: [
+      { label: "About",   href: "/about" },
+      { label: "Blog",    href: "/blog" },
+      { label: "Contact", href: "/contact" },
+      { label: "Careers", href: "#" },
+      { label: "Press Kit", href: "#" },
+    ],
   },
   {
     heading: "Legal",
-    links: ["Privacy Policy", "Terms of Service", "Cookie Policy", "Security", "GDPR"],
+    links: [
+      { label: "Privacy Policy",   href: "/privacy" },
+      { label: "Terms of Service", href: "/terms" },
+      { label: "Cookie Policy",    href: "#" },
+      { label: "Security",         href: "#" },
+      { label: "GDPR",             href: "#" },
+    ],
   },
 ];
 
@@ -50,12 +68,12 @@ export function Footer() {
               </h4>
               <ul className="space-y-2.5">
                 {links.map((link) => (
-                  <li key={link}>
+                  <li key={link.label}>
                     <Link
-                      href="#"
+                      href={link.href}
                       className="text-txt-muted hover:text-txt-primary text-sm transition-colors"
                     >
-                      {link}
+                      {link.label}
                     </Link>
                   </li>
                 ))}

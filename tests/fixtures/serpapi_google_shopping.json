@@ -1,0 +1,36 @@
+{
+  "search_metadata": { "status": "Success" },
+  "shopping_results": [
+    {
+      "position": 1,
+      "title": "Sony WH-1000XM5 Wireless Noise Cancelling Headphones",
+      "product_link": "https://www.google.com/shopping/product/1111",
+      "product_id": "1111",
+      "source": "Amazon.com",
+      "price": "$348.00",
+      "extracted_price": 348.0,
+      "rating": 4.6,
+      "reviews": 1200,
+      "thumbnail": "https://example.com/xm5.jpg",
+      "extensions": ["Noise cancelling", "30h battery"]
+    },
+    {
+      "position": 2,
+      "title": "Bose QuietComfort Ultra Headphones",
+      "product_link": "https://www.google.com/shopping/product/2222",
+      "product_id": "2222",
+      "source": "Best Buy",
+      "price": "$429.00",
+      "extracted_price": 429.0,
+      "rating": 4.5,
+      "reviews": 800,
+      "thumbnail": "https://example.com/qc.jpg"
+    },
+    {
+      "position": 3,
+      "title": "",
+      "source": "NoTitle Store",
+      "extracted_price": 10.0
+    }
+  ]
+}

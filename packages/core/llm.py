@@ -19,9 +19,11 @@ from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
 from core.config import Settings, get_settings
-from core.models import ExplanationSet, RankedProduct
+from core.models import ExplanationSet, RankedOffer, RankedProduct
 from core.prompts import (
     EXPLAIN_HUMAN,
+    EXPLAIN_OFFERS_HUMAN,
+    EXPLAIN_OFFERS_SYSTEM,
     EXPLAIN_STREAM_SYSTEM,
     EXPLAIN_SYSTEM,
     REWRITE_SYSTEM,
@@ -116,6 +118,39 @@ def explain(
     config = {"callbacks": callbacks or []}
     result: ExplanationSet = chain.invoke(
         {"query": query, "products": _format_products(products)}, config=config
+    )
+    return result
+
+
+def _format_offers(offers: list[RankedOffer]) -> str:
+    blocks: list[str] = []
+    for ranked in offers:
+        o = ranked.offer
+        price = f"${o.price:.2f}" if o.price is not None else "n/a"
+        rating = f"{o.rating} stars from {o.review_count} reviews" if o.rating else "no rating"
+        blocks.append(
+            f"- product_id: {o.product_id}\n"
+            f"  title: {o.title}\n"
+            f"  price: {price}\n"
+            f"  store: {o.store}\n"
+            f"  rating: {rating}\n"
+            f"  details: {o.snippet[:300]}"
+        )
+    return "\n".join(blocks)
+
+
+def explain_offers(
+    query: str, offers: list[RankedOffer], model: Any, callbacks: list[Any] | None = None
+) -> ExplanationSet:
+    """Grounded per-offer reasons over live shopping offers (aggregator path)."""
+    structured = model.with_structured_output(ExplanationSet)
+    prompt = ChatPromptTemplate.from_messages(
+        [("system", EXPLAIN_OFFERS_SYSTEM), ("human", EXPLAIN_OFFERS_HUMAN)]
+    )
+    chain = prompt | structured
+    config = {"callbacks": callbacks or []}
+    result: ExplanationSet = chain.invoke(
+        {"query": query, "offers": _format_offers(offers)}, config=config
     )
     return result
 

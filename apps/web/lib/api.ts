@@ -9,7 +9,83 @@ export type Recommendation = {
   avg_rating:    number;
   review_count?: number;   // present if backend sends it
   final_score:   number;
+  // Optional live-aggregator fields (present on /aggregate results, absent on /chat):
+  price?:        number | null;
+  currency?:     string;
+  store?:        string;
+  product_url?:  string;
+  thumbnail?:    string | null;
+  reason?:       string;
 };
+
+/* ── live aggregator (/aggregate) types ─────────────────────────────────────── */
+export type OfferT = {
+  product_id: string;
+  title: string;
+  price: number | null;
+  currency: string;
+  store: string;
+  product_url: string;
+  thumbnail: string | null;
+  rating: number | null;
+  review_count: number;
+  snippet: string;
+  position: number;
+};
+
+export type RankedOfferT = {
+  offer: OfferT;
+  final_score: number;
+  relevance_score: number;
+  rating_score: number;
+  volume_confidence: number;
+  reason: string;
+};
+
+export type AggregatorResult = {
+  query: string;
+  summary: string;
+  offers: RankedOfferT[];
+  no_match: boolean;
+};
+
+/** Map a ranked live offer into the Recommendation shape ProductCard renders. */
+export function offerToRecommendation(r: RankedOfferT): Recommendation {
+  return {
+    product_id:   r.offer.product_id,
+    title:        r.offer.title,
+    avg_rating:   r.offer.rating ?? 0,
+    review_count: r.offer.review_count,
+    final_score:  r.final_score,
+    price:        r.offer.price,
+    currency:     r.offer.currency,
+    store:        r.offer.store,
+    product_url:  r.offer.product_url,
+    thumbnail:    r.offer.thumbnail,
+    reason:       r.reason,
+  };
+}
+
+/** Live shopping aggregator: POST /aggregate (non-streaming; cached server-side). */
+export async function aggregate(
+  query: string,
+  authToken?: string,
+  k = 6,
+  signal?: AbortSignal,
+): Promise<AggregatorResult> {
+  const token = authToken || DEV_TOKEN;
+  const response = await fetch(`${API_URL}/aggregate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ query, k }),
+    signal,
+  });
+  if (!response.ok) throw new Error(`aggregate request failed: ${response.status}`);
+  return response.json() as Promise<AggregatorResult>;
+}
 
 export type RecommendationsPayload = {
   products:  Recommendation[];

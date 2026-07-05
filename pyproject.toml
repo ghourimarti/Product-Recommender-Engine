@@ -29,6 +29,7 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-grpc>=1.27",
     "opentelemetry-instrumentation-fastapi>=0.48b0",
     "langfuse>=2,<3",
+    "httpx>=0.27",  # SerpApi client (live shopping aggregator source)
 ]
 # NOTE: RAGAS was the Decision-19 choice but every ragas release hard-imports
 # langchain_community.chat_models.vertexai (removed in langchain-community for
@@ -46,6 +47,7 @@ packages = [
     "packages/retrieval",
     "packages/recommender",
     "packages/evaluation",
+    "packages/sources",
 ]
 
 [dependency-groups]

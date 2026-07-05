@@ -70,6 +70,13 @@ const config: Config = {
       backgroundImage: {
         "shimmer-gradient":
           "linear-gradient(90deg, transparent 25%, rgba(255,255,255,0.04) 50%, transparent 75%)",
+        "grid-glow":
+          "radial-gradient(circle at 50% 0%, rgba(99,102,241,0.15) 0%, transparent 55%)",
+        "hero-grid":
+          "linear-gradient(rgba(99,102,241,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.06) 1px, transparent 1px)",
+      },
+      maxWidth: {
+        "8xl": "88rem",
       },
     },
   },

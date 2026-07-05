@@ -27,11 +27,12 @@ from core.config import get_settings
 from core.embeddings import get_dense_embeddings
 from core.history import DynamoChatHistory
 from core.llm import astream_explanation, build_chat_model, rewrite_query
-from core.models import ChatRequest, Product, RankingResult, RecommendRequest
+from core.models import AggregatorResult, ChatRequest, Product, RankingResult, RecommendRequest
 from core.observability import configure_observability, get_langchain_callbacks
 from core.ratelimit import RateLimiter, RateLimitExceeded
 from core.resilience import CircuitBreaker
 from core.security import redact_pii
+from recommender.aggregator import aggregate
 from recommender.resilient import resilient_recommend
 from retrieval.index import load_catalog
 from retrieval.semantic_cache import SemanticCache
@@ -178,6 +179,15 @@ def recommend_endpoint(
         k=req.k,
         breaker=_breaker(),
     )
+
+
+@app.post("/aggregate")
+def aggregate_endpoint(
+    req: RecommendRequest, user_id: str = Depends(rate_limited_user)
+) -> AggregatorResult:
+    """Live shopping aggregator: SerpApi search -> rank -> grounded reasons (cached)."""
+    logger.info("aggregate user=%s query=%s", user_id, redact_pii(req.query))
+    return aggregate(req.query, _cache(), _model(), k=req.k, callbacks=list(_callbacks()))
 
 
 @app.post("/chat")

@@ -6,8 +6,8 @@ import { useAuth } from "@clerk/nextjs";
 import { Search, X, SlidersHorizontal } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-import { type Recommendation, type RecommendationsPayload, streamChat } from "@/lib/api";
-import { Navbar }       from "@/components/Navbar";
+import { type Recommendation, aggregate, offerToRecommendation } from "@/lib/api";
+import { Topbar }       from "@/components/dashboard/Topbar";
 import { ProductCard }  from "@/components/ProductCard";
 import { SkeletonCard } from "@/components/SkeletonCard";
 import { AIPanel, type AIMeta } from "@/components/AIPanel";
@@ -35,11 +35,11 @@ const CATEGORIES = [
 ];
 
 /* ── inner component (uses useSearchParams) ──────────────────────────────── */
-function SearchContent() {
+function DiscoverContent() {
   const searchParams = useSearchParams();
-  const { userId, getToken } = useAuth();
+  const { getToken } = useAuth();
 
-  /* ── state (streaming logic — untouched from original page.tsx) ── */
+  /* ── state (streaming logic — verbatim from the original search page) ── */
   const [query,    setQuery]    = useState("");
   const [products, setProducts] = useState<Recommendation[]>([]);
   const [answer,   setAnswer]   = useState("");
@@ -50,15 +50,17 @@ function SearchContent() {
   const inputRef  = useRef<HTMLInputElement>(null);
   const startTime = useRef<number>(0);
 
-  const sessionId = userId ?? "anon";
-
-  /* pre-populate from URL: /search?q=... (hero search on landing page) */
+  /* pre-populate from URL: /dashboard/discover?q=... (hero / quick-search links) */
   useEffect(() => {
     const q = searchParams.get("q");
-    if (q) setQuery(q);
+    if (q) {
+      setQuery(q);
+      // auto-run when arriving with a query from elsewhere in the app
+      void send(q);
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ── streaming logic (identical to original — only sessionId + token updated) ── */
+  /* ── live aggregator: POST /aggregate -> ranked real offers + grounded reasons ── */
   async function send(overrideQuery?: string) {
     const q = (overrideQuery ?? query).trim();
     if (!q || status === "streaming") return;
@@ -76,25 +78,12 @@ function SearchContent() {
 
     try {
       const token = await getToken();
-      for await (const event of streamChat(q, sessionId, controller.signal, token ?? undefined)) {
-        if (event.event === "recommendations") {
-          const payload = event.data as RecommendationsPayload;
-          setProducts(payload.products ?? []);
-          if (payload.no_match) setBanner("No good match found for that request.");
-        } else if (event.event === "token") {
-          const { text } = event.data as { text: string };
-          setAnswer((prev) => prev + text);
-        } else if (event.event === "done") {
-          const { degraded } = event.data as { degraded?: boolean };
-          if (degraded) setBanner("Explanations are temporarily unavailable.");
-          setMeta((m) => ({
-            ...m,
-            latencyMs: Date.now() - startTime.current,
-            degraded: !!degraded,
-          }));
-          setStatus("idle");
-        }
-      }
+      const result = await aggregate(q, token ?? undefined, 6, controller.signal);
+      setProducts(result.offers.map(offerToRecommendation));
+      setAnswer(result.summary);
+      if (result.no_match) setBanner("No good match found for that request.");
+      setMeta((m) => ({ ...m, latencyMs: Date.now() - startTime.current }));
+      setStatus("idle");
     } catch (error) {
       if ((error as Error).name === "AbortError") setStatus("idle");
       else {
@@ -116,74 +105,72 @@ function SearchContent() {
 
   /* ── render ─────────────────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen flex flex-col bg-bg-base">
-      <Navbar variant="app" />
+    <>
+      <Topbar title="Discover" subtitle="AI-powered product search" />
 
-      <main className="flex-1 pt-16">
-
-        {/* ── sticky search bar ── */}
-        <div className="sticky top-16 z-40 bg-bg-base/90 backdrop-blur-md border-b border-bg-border">
-          <div className="max-w-7xl mx-auto px-6 py-4">
-            <div className="flex items-center gap-3">
-              {/* search input */}
-              <div className="relative flex-1">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-txt-muted pointer-events-none" />
-                <input
-                  ref={inputRef}
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && send()}
-                  placeholder="Describe what you're looking for…"
-                  disabled={isStreaming}
-                  className="input-search pl-10 pr-10 disabled:opacity-60 disabled:cursor-not-allowed"
-                />
-                {query && !isStreaming && (
-                  <button
-                    onClick={() => { setQuery(""); inputRef.current?.focus(); }}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-txt-muted hover:text-txt-primary"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              {/* results count pill */}
-              <button className="hidden md:flex items-center gap-2 btn-secondary px-3 py-2.5 text-sm shrink-0">
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                3 results
-              </button>
-
-              {/* main CTA */}
-              {isStreaming ? (
-                <button onClick={cancel} className="btn-secondary px-5 py-2.5 text-sm shrink-0">
-                  Stop
-                </button>
-              ) : (
+      {/* ── sticky search bar ── */}
+      <div className="sticky top-16 z-20 bg-bg-base/90 backdrop-blur-md border-b border-bg-border">
+        <div className="max-w-6xl mx-auto px-6 py-4">
+          <div className="flex items-center gap-3">
+            {/* search input */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-txt-muted pointer-events-none" />
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && send()}
+                placeholder="Describe what you're looking for…"
+                disabled={isStreaming}
+                className="input-search pl-10 pr-10 disabled:opacity-60 disabled:cursor-not-allowed"
+              />
+              {query && !isStreaming && (
                 <button
-                  onClick={() => send()}
-                  disabled={!query.trim()}
-                  className="btn-primary px-5 py-2.5 text-sm shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => { setQuery(""); inputRef.current?.focus(); }}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-txt-muted hover:text-txt-primary"
                 >
-                  Recommend
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>
+
+            {/* results count pill */}
+            <button className="hidden md:flex items-center gap-2 btn-secondary px-3 py-2.5 text-sm shrink-0">
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              3 results
+            </button>
+
+            {/* main CTA */}
+            {isStreaming ? (
+              <button onClick={cancel} className="btn-secondary px-5 py-2.5 text-sm shrink-0">
+                Stop
+              </button>
+            ) : (
+              <button
+                onClick={() => send()}
+                disabled={!query.trim()}
+                className="btn-primary px-5 py-2.5 text-sm shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Recommend
+              </button>
+            )}
           </div>
         </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-6">
 
         {/* ── status line ── */}
         {isStreaming && (
-          <div className="max-w-7xl mx-auto px-6 pt-4">
-            <p className="text-txt-muted text-xs flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-              {hasResults ? "Generating AI analysis…" : "Searching product catalog…"}
-            </p>
-          </div>
+          <p className="text-txt-muted text-xs flex items-center gap-2 pt-4">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+            {hasResults ? "Generating AI analysis…" : "Searching product catalog…"}
+          </p>
         )}
 
         {/* ── banner ── */}
         {banner && (
-          <div className="max-w-7xl mx-auto px-6 pt-4">
+          <div className="pt-4">
             <Banner
               message={banner}
               variant={status === "error" ? "error" : "warning"}
@@ -192,13 +179,9 @@ function SearchContent() {
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════════════
-            EMPTY STATE — before first search
-        ══════════════════════════════════════════════════════════════ */}
+        {/* ══ EMPTY STATE ══ */}
         {showEmpty && (
-          <section className="max-w-7xl mx-auto px-6 py-12">
-
-            {/* greeting */}
+          <section className="py-12">
             <div className="text-center mb-10">
               <h2 className="text-2xl font-display font-semibold text-txt-primary mb-2">
                 What are you looking for today?
@@ -208,7 +191,6 @@ function SearchContent() {
               </p>
             </div>
 
-            {/* trending chips */}
             <div className="mb-10">
               <p className="text-xs font-semibold text-txt-muted uppercase tracking-widest mb-3">
                 Trending
@@ -228,7 +210,6 @@ function SearchContent() {
               </div>
             </div>
 
-            {/* category grid */}
             <p className="text-xs font-semibold text-txt-muted uppercase tracking-widest mb-3">
               Browse by Category
             </p>
@@ -249,24 +230,19 @@ function SearchContent() {
           </section>
         )}
 
-        {/* ══════════════════════════════════════════════════════════════
-            RESULTS LAYOUT — 2-column (cards | AI panel)
-        ══════════════════════════════════════════════════════════════ */}
+        {/* ══ RESULTS LAYOUT ══ */}
         {(hasResults || showSkeleton || answer) && (
-          <section className="max-w-7xl mx-auto px-6 py-6">
+          <section className="py-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
 
               {/* LEFT — product cards */}
               <div className="lg:col-span-2 space-y-4">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-txt-muted text-sm">
-                    {hasResults
-                      ? `${products.length} recommendation${products.length !== 1 ? "s" : ""} for "${query}"`
-                      : "Searching…"}
-                  </p>
-                </div>
+                <p className="text-txt-muted text-sm mb-1">
+                  {hasResults
+                    ? `${products.length} recommendation${products.length !== 1 ? "s" : ""} for "${query}"`
+                    : "Searching…"}
+                </p>
 
-                {/* skeletons */}
                 {showSkeleton && (
                   <div className="space-y-4">
                     <SkeletonCard />
@@ -275,28 +251,17 @@ function SearchContent() {
                   </div>
                 )}
 
-                {/* real cards */}
                 <AnimatePresence>
                   {products.map((p, i) => (
-                    <ProductCard
-                      key={p.product_id}
-                      product={p}
-                      rank={i + 1}
-                      delay={i * 0.08}
-                    />
+                    <ProductCard key={p.product_id} product={p} rank={i + 1} delay={i * 0.08} />
                   ))}
                 </AnimatePresence>
               </div>
 
               {/* RIGHT — AI panel + sidebar */}
               <div className="space-y-4">
-                <AIPanel
-                  answer={answer}
-                  isStreaming={isStreaming}
-                  meta={meta}
-                />
+                <AIPanel answer={answer} isStreaming={isStreaming} meta={meta} />
 
-                {/* Recent searches hint */}
                 {!isStreaming && (
                   <motion.div
                     initial={{ opacity: 0 }}
@@ -311,7 +276,7 @@ function SearchContent() {
                         <button
                           key={t}
                           onClick={() => send(t)}
-                          className="w-full text-left text-xs text-txt-secondary hover:text-txt-primary
+                          className="w-full text-left text-xs text-txt-secondary
                                      hover:text-accent py-1 transition-colors"
                         >
                           → {t}
@@ -324,13 +289,13 @@ function SearchContent() {
             </div>
           </section>
         )}
-      </main>
-    </div>
+      </div>
+    </>
   );
 }
 
 /* ── page shell with Suspense (required for useSearchParams in Next.js 15) ── */
-export default function SearchPage() {
+export default function DiscoverPage() {
   return (
     <Suspense
       fallback={
@@ -339,7 +304,7 @@ export default function SearchPage() {
         </div>
       }
     >
-      <SearchContent />
+      <DiscoverContent />
     </Suspense>
   );
 }
