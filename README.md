@@ -502,10 +502,6 @@ deployable services — with tests, eval gates, security, observability, and inf
 `GitHub Actions / ArgoCD` · `Prometheus / Grafana / Langfuse` ·
 `AWS (EKS · DynamoDB · ECR · S3 · SageMaker)`
 
-### 🎓 Education & Certifications
-- **Machine Learning** + **Deep Learning** Specializations — *Andrew Ng · Coursera*
-- **LLMOps / MLOps / DevOps-DataOps-MLOps / GenAI-on-AWS** Specializations — *Duke · Coursera*
-- **IBM** Full-Stack & AI Developer · Django · Node/Express · Databases & SQL — *Coursera*
 
 ---
 
