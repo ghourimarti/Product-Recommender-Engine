@@ -45,6 +45,11 @@ journey is in [`docs/decision-log.md`](docs/decision-log.md) (24 architecture de
 [`docs/transformation-plan.md`](docs/transformation-plan.md) (18-step plan), and
 [`docs/how-to-verify.md`](docs/how-to-verify.md) (run every step yourself).
 
+> **Honest scope up front:** the current catalog is **9 audio products / 450 real reviews**, so this
+> is a genuine **within-category (audio) recommender** — not a broad multi-category catalog. It is
+> **built, tested, and demonstrated locally**; the architecture is *designed for* scale (see
+> [Results](#-results-real-numbers-honest-scope)), but has **not** been operated at millions-of-users
+> scale with live traffic. Full data notes: [`docs/data-report.md`](docs/data-report.md).
 
 ---
 
@@ -81,6 +86,10 @@ journey is in [`docs/decision-log.md`](docs/decision-log.md) (24 architecture de
 
 </div>
 
+> **Adding your own screenshots:** create a `screenshots/` folder at the repo root, drop your PNGs
+> in it (e.g. `landing.png`, `discover.png`, `dashboard.png`), and reference them with
+> `![Alt text](screenshots/your-file.png)`. Paths are relative to the README, so they render on
+> GitHub automatically. Keep names lowercase-with-dashes and images < ~1 MB each.
 
 ---
 
@@ -225,7 +234,7 @@ make eval-rag                    # answer-quality (custom LLM judge)         →
 ### 4 · Run the full stack — **Docker (recommended)**
 ```bash
 make bootstrap    # app tier up (data + api + web), catalog indexed, URLs printed
-make up         # everything: data + app + observability + Langfuse (15 services)
+make full         # everything: data + app + observability + Langfuse (15 services)
 make urls         # print every UI URL (ports read from .env)
 ```
 > **One tier at a time:** `make db` → `make app` → `make obs` (adds Jaeger/Prometheus/Grafana/
@@ -437,6 +446,12 @@ Table: p2-recommender
 | **Cost** | LLM-dominated; Groq primary keeps per-query cheap; hard `max_tokens` cap + kill switch |
 | **Deploy** | Local Docker verified (API image builds + `/health` OK) · Helm chart structurally validated · Terraform **HCL syntax-valid** (not applied) |
 
+> **Honest scope:** built, tested, and demonstrated **locally** on a **9-product / 450-review**
+> audio catalog. The architecture is *designed for* the "millions of users" target (stateless API,
+> autoscaling, multi-layer cache, DynamoDB/ElastiCache/EKS), and the IaC + Helm express that path —
+> but it has **not** been operated at that scale with live traffic and on-call. `helm lint/template`
+> and `terraform init/validate/plan` are the cloud-side gates (run them against your own account);
+> here they are written and **statically validated**, not applied.
 
 ---
 
@@ -445,7 +460,7 @@ Table: p2-recommender
 A clean local → cloud path (Decisions 14–17):
 
 1. **Local Docker** — multi-stage **non-root** images (`api` / `web`) + the 4-layer compose mesh;
-   `make up` brings up the whole stack; the API image builds and serves `/health`.
+   `make full` brings up the whole stack; the API image builds and serves `/health`.
 2. **Helm** — a single chart (`infra/helm/p2-recommender`): api/web Deployments + Service + **HPA**,
    **Qdrant StatefulSet** + PVC, Redis, ServiceAccount (**IRSA** slot), optional ALB Ingress.
    ```bash
@@ -483,7 +498,7 @@ Every step is reproducible from [`docs/how-to-verify.md`](docs/how-to-verify.md)
 Built by **Zain Ul Abdin** — a **Full-Stack AI / GenAI Engineer** who builds production-grade AI
 systems **end to end**: not just the model, but the whole stack — RAG pipelines, agentic systems,
 fine-tuned LLMs, inference serving, containerized deployment, CI/CD, and the observability that keeps
-it healthy. **ProductIQ** is a projects that is
+it healthy. **ProductIQ** is one of a series of portfolio projects that take bootcamp-grade demos to
 deployable services — with tests, eval gates, security, observability, and infrastructure-as-code.
 
 </div>
@@ -503,6 +518,8 @@ deployable services — with tests, eval gates, security, observability, and inf
 `AWS (EKS · DynamoDB · ECR · S3 · SageMaker)`
 
 ### 🎓 Education & Certifications
+- **BE**, Electrical & Electronics Engineering — **NUST**, Islamabad
+- **MEng**, Electrical & Electronics Engineering — **UET**, Lahore
 - **Machine Learning** + **Deep Learning** Specializations — *Andrew Ng · Coursera*
 - **LLMOps / MLOps / DevOps-DataOps-MLOps / GenAI-on-AWS** Specializations — *Duke · Coursera*
 - **IBM** Full-Stack & AI Developer · Django · Node/Express · Databases & SQL — *Coursera*
