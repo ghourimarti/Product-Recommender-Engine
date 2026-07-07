@@ -271,7 +271,7 @@
 
 ## Decision 22: Repo structure
 **Question:** Mono/poly repo, boundaries, layout.
-**Decision:** **Monorepo at repo root.** `demo/` untouched (reference), `old/` archived (ignored), `Prompts/` source docs. New layout:
+**Decision:** **Monorepo at repo root.** `demo/` untouched (reference), `old/` archived (ignored). New layout:
 ```
 /
 ├── apps/{web, api, ingestion}
@@ -314,7 +314,7 @@
 
 ## Decision Summary (at-a-glance)
 
-> **Legend.** **Prod-grade?** — Y = production-correct as designed; Y\* = production-correct *with a named caveat* (cost/scale ceiling). **Gap closed** references the skill-audit gap list in `Prompts/01-career-assessment.md`. **Diverges?** — differs from the prior `P2-...-Enterprise/` build.
+> **Legend.** **Prod-grade?** — Y = production-correct as designed; Y\* = production-correct *with a named caveat* (cost/scale ceiling). **Gap closed** notes the production capability this decision adds. **Diverges?** — differs from the prior `P2-...-Enterprise/` build.
 
 | # | Decision | Options (✓ = picked) | Pick | Why (1-line) | Prod-grade? | Skill-audit gap it closes | Reversibility | Diverges? |
 |---|---|---|---|---|---|---|---|---|
