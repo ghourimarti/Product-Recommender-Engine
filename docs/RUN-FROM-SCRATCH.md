@@ -73,12 +73,12 @@ previous, so a bigger stack is always a superset of the smaller one.
 |---|---|---|
 | `make db` | Qdrant, DynamoDB-local, Redis | `docker-compose.data.yml` |
 | `make app` | db + api + web | `data.yml` + `app.yml` |
-| `make obs` | Jaeger + Prom + Grafana + RedisInsight **+ Langfuse** (10 svc) | `observability.yml` + `langfuse.yml` |
-| `make langfuse` | Langfuse subset only (6 svc: web/worker/pg/ch/redis/minio) | `docker-compose.langfuse.yml` |
-| `make full` | db + app + obs (everything, 15 services) | all four |
-| `make down` | stop + remove containers (keeps volumes) | all four |
-| `make downv` | stop + remove containers + **wipe named volumes** (destructive) | all four |
-| `make upv` | **from zero**: `downv` → build → start ALL tiers → seed catalog | all four |
+| `make obs` | Jaeger + Prom + Grafana + RedisInsight **+ Langfuse** (10 svc) | `observability.yml` (Langfuse is inside it) |
+| `make langfuse` | Langfuse subset only (6 svc: web/worker/pg/ch/redis/minio) | `observability.yml` (started by service name) |
+| `make full` | db + app + obs (everything, 15 services) | all three |
+| `make down` | stop + remove containers (keeps volumes) | all three |
+| `make downv` | stop + remove containers + **wipe named volumes** (destructive) | all three |
+| `make upv` | **from zero**: `downv` → build → start ALL tiers → seed catalog | all three |
 
 `make obs` includes Langfuse by default — one command brings up every telemetry surface. Use
 `make langfuse` only when you want the Langfuse subset in isolation (debugging its own boot,
@@ -415,7 +415,7 @@ variant), and skip `make langfuse`. The api sends traces to cloud instead.
    `@localhost`. Use `admin@example.com` or your own real address.
 2. The ClickHouse healthcheck must probe `127.0.0.1:8123`, not `localhost:8123`. Alpine's
    BusyBox resolver returns `::1` first, but ClickHouse only binds IPv4 → "connection
-   refused" even though the server is listening. Fixed in `docker-compose.langfuse.yml`.
+   refused" even though the server is listening. Fixed in `docker-compose.observability.yml`.
 
 ---
 

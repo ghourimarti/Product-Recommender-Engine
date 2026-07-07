@@ -11,15 +11,18 @@
 #   obs            = observability tier  (Jaeger + Prometheus + Grafana +
 #                                         RedisInsight + Langfuse[web/worker/
 #                                         postgres/clickhouse/redis/minio])
-#   langfuse       = Langfuse stack ONLY (for isolated boot / debugging)
+#   langfuse       = Langfuse subset ONLY (for isolated boot / debugging; part
+#                                          of the obs tier, started by name)
 #   full           = db + app + obs      (everything, 15 services)
 #   up             = alias for full      (backwards-compat)
 #   upv            = FROM ZERO — wipe volumes + build + start + seed catalog
 #   down / downv   = stop full stack (downv also wipes named volumes)
 #
-# All four compose files declare `name: p2-recommender`, so they share ONE
-# docker project + network. The api container reaches jaeger/langfuse-web by
-# DNS name if obs is up; if obs is down, telemetry is dropped silently.
+# All three compose files (data / app / observability) declare
+# `name: p2-recommender`, so they share ONE docker project + network. Langfuse
+# lives inside docker-compose.observability.yml. The api container reaches
+# jaeger/langfuse-web by DNS name if obs is up; if obs is down, telemetry is
+# dropped silently.
 #
 # `--env-file .env` is passed EXPLICITLY: with compose files in a subdirectory,
 # docker compose does NOT auto-load `.env` from CWD. Skipping this makes the
@@ -27,11 +30,14 @@
 DC_ENV  := --env-file .env
 DC_DATA := docker compose $(DC_ENV) -f infra/compose/docker-compose.data.yml
 DC_APP  := docker compose $(DC_ENV) -f infra/compose/docker-compose.data.yml -f infra/compose/docker-compose.app.yml
-# `make obs` = Jaeger/Prom/Grafana/RedisInsight + Langfuse (10 services). To bring
-# up ONLY the langfuse subset, use `make langfuse` (DC_LF below).
-DC_OBS  := docker compose $(DC_ENV) -f infra/compose/docker-compose.observability.yml -f infra/compose/docker-compose.langfuse.yml
-DC_LF   := docker compose $(DC_ENV) -f infra/compose/docker-compose.langfuse.yml
-DC_FULL := docker compose $(DC_ENV) -f infra/compose/docker-compose.data.yml -f infra/compose/docker-compose.app.yml -f infra/compose/docker-compose.observability.yml -f infra/compose/docker-compose.langfuse.yml
+# `make obs` = the whole observability tier in ONE file: Jaeger/Prom/Grafana/
+# RedisInsight + Langfuse (10 services). Langfuse now lives inside
+# docker-compose.observability.yml. To bring up ONLY the Langfuse subset, use
+# `make langfuse` — it targets the langfuse-* services by name (LF_SERVICES).
+DC_OBS  := docker compose $(DC_ENV) -f infra/compose/docker-compose.observability.yml
+DC_LF   := $(DC_OBS)
+LF_SERVICES := langfuse-web langfuse-worker langfuse-postgres langfuse-clickhouse langfuse-redis langfuse-minio
+DC_FULL := docker compose $(DC_ENV) -f infra/compose/docker-compose.data.yml -f infra/compose/docker-compose.app.yml -f infra/compose/docker-compose.observability.yml
 
 # Native runs (make serve). Shell env overrides Makefile default: API_PORT=2999 make serve
 API_PORT ?= 2011
@@ -100,8 +106,8 @@ obs:            ## observability tier: Jaeger + Prom + Grafana + RedisInsight + 
 
 observability: obs   ## Alias for `obs`
 
-langfuse:       ## Langfuse self-host: web + worker + postgres + clickhouse + redis + minio
-	$(DC_LF) up -d
+langfuse:       ## Langfuse self-host ONLY (web + worker + postgres + clickhouse + redis + minio)
+	$(DC_LF) up -d $(LF_SERVICES)
 	@echo ""
 	@echo "  Langfuse booting — cold start ~1-3 min (ClickHouse warm-up + migrations)."
 	@echo "  Watch:   docker logs -f p2-langfuse-web"

@@ -1,15 +1,27 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # OBSERVABILITY  (standalone tier — can run without app or data)
 #
+# Core (lightweight, instant start):
 #   • Jaeger        — distributed traces (OTLP receiver on 4317)
 #   • Prometheus    — scrapes the API's /metrics endpoint
 #   • Grafana       — dashboards over Prometheus (empty; log in admin/admin)
 #   • RedisInsight  — GUI for Redis
 #
-# Skipped intentionally: **Langfuse self-host**. It needs its own Postgres +
-# ClickHouse to run properly; adding it silently would be risky. Port slot 2008
-# is still reserved in .env — set the LANGFUSE_HOST/keys there to send traces
-# to Langfuse Cloud or a manually-started self-host instance.
+# LLM observability — Langfuse self-host (heavier; cold start ~1–3 min):
+#   • langfuse-web / -worker / -postgres / -clickhouse / -redis / -minio
+#     Langfuse is part of THIS tier (it is observability), so `make obs` brings
+#     it up alongside the core services. It runs its OWN postgres/clickhouse/
+#     redis/minio so it never fights with the app-tier stores.
+#
+# To boot ONLY the Langfuse subset in isolation (debugging), start just those
+# services by name: `make langfuse` (it targets the langfuse-* services).
+#
+# First-boot side effects (via LANGFUSE_INIT_*):
+#   • Creates org "p2-recommender" + project "local" + admin user (email/pass
+#     from .env).
+#   • Registers the LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY already in your
+#     .env AS the local project's keys — so your API code keeps working
+#     unchanged, just pointed at http://localhost:2008 instead of cloud.
 #
 # Same `name:` as the other tiers → shared project network. Prometheus and
 # RedisInsight expect to find `api` and `redis` containers by name; if you run
@@ -17,6 +29,39 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: p2-recommender
+
+# Shared Langfuse env (web + worker). Kept here (not a separate file) so the
+# whole observability tier lives in ONE compose file.
+x-langfuse-shared: &langfuse-shared
+  DATABASE_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD:-langfuse-local-dev}@langfuse-postgres:5432/langfuse
+  CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+  CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+  CLICKHOUSE_USER: langfuse
+  CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-langfuse-local-dev}
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  REDIS_HOST: langfuse-redis
+  REDIS_PORT: "6379"
+  REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:-langfuse-local-dev}
+  LANGFUSE_S3_EVENT_UPLOAD_ENABLED: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD:-langfuse-local-dev}
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_MEDIA_UPLOAD_ENABLED: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD:-langfuse-local-dev}
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  SALT: ${LANGFUSE_SALT:-langfuse-local-dev-salt}
+  ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+  TELEMETRY_ENABLED: "true"
+  LANGFUSE_LOG_LEVEL: info
 
 services:
   jaeger:
@@ -62,7 +107,136 @@ services:
     ports:
       - "${REDISINSIGHT_PORT:-2005}:5540"
 
+  # ── Langfuse — self-hosted LLM observability (6 services) ──────────────────
+  langfuse-web:
+    image: langfuse/langfuse:3
+    container_name: p2-langfuse-web
+    restart: unless-stopped
+    depends_on:
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+    ports:
+      - "${LANGFUSE_UI_PORT:-2008}:3000"
+    environment:
+      <<: *langfuse-shared
+      NEXTAUTH_URL: http://localhost:${LANGFUSE_UI_PORT:-2008}
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-langfuse-local-dev-nextauth-secret}
+      # ── First-boot bootstrap. On a fresh volume, Langfuse creates the org,
+      #    project, admin user AND registers the pk/sk below as valid API keys.
+      #    After boot they're immutable via env — change them in the UI instead.
+      LANGFUSE_INIT_ORG_ID: p2-recommender-org
+      LANGFUSE_INIT_ORG_NAME: p2-recommender
+      LANGFUSE_INIT_PROJECT_ID: p2-recommender-project
+      LANGFUSE_INIT_PROJECT_NAME: local
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-admin@localhost}
+      LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-Admin}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-changeme}
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    container_name: p2-langfuse-worker
+    restart: unless-stopped
+    depends_on:
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+    environment:
+      <<: *langfuse-shared
+
+  langfuse-postgres:
+    image: postgres:15-alpine
+    container_name: p2-langfuse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: ${LANGFUSE_POSTGRES_PASSWORD:-langfuse-local-dev}
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: p2-langfuse-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-langfuse-local-dev}
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      # NOTE: use 127.0.0.1, not localhost. Alpine's BusyBox resolver returns ::1
+      # first for `localhost`, but ClickHouse only binds IPv4 → connection refused.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  langfuse-redis:
+    image: redis:7-alpine
+    container_name: p2-langfuse-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${LANGFUSE_REDIS_AUTH:-langfuse-local-dev}
+    volumes:
+      - langfuse_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $${LANGFUSE_REDIS_AUTH:-langfuse-local-dev} ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    environment:
+      LANGFUSE_REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:-langfuse-local-dev}
+
+  langfuse-minio:
+    # Pre-creates the "langfuse" bucket via mkdir before starting the server,
+    # so Langfuse doesn't 404 on the first S3 write. Same trick the official
+    # Langfuse compose uses. Console kept internal — no host port.
+    image: minio/minio:latest
+    container_name: p2-langfuse-minio
+    restart: unless-stopped
+    entrypoint: >
+      sh -c 'mkdir -p /data/langfuse &&
+             exec minio server /data --console-address ":9001"'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_ROOT_PASSWORD:-langfuse-local-dev}
+    volumes:
+      - langfuse_minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || (curl -sf http://localhost:9000/minio/health/live)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
 volumes:
   prometheus_data:
   grafana_data:
   redisinsight_data:
+  langfuse_postgres_data:
+  langfuse_clickhouse_data:
+  langfuse_clickhouse_logs:
+  langfuse_redis_data:
+  langfuse_minio_data:
