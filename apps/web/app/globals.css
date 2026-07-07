@@ -88,3 +88,170 @@
   vertical-align: middle;
   border-radius: 1px;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LIGHT MARKETING THEME  (constructor.com-style)
+   Everything below is scoped under .theme-light so the dark dashboard is
+   completely unaffected. Marketing pages wrap content in <div class="theme-light">.
+══════════════════════════════════════════════════════════════════════════ */
+.theme-light {
+  color-scheme: light;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+@layer components {
+  /* Light buttons */
+  .mkt-btn-primary {
+    @apply bg-mkt-brand hover:bg-mkt-brand-d text-white rounded-lg font-semibold
+           transition-all duration-200 cursor-pointer inline-flex items-center
+           justify-center gap-2 select-none shadow-sm hover:shadow-md;
+  }
+  .mkt-btn-secondary {
+    @apply border border-mkt-border hover:border-mkt-brand/40 bg-white
+           text-mkt-ink hover:text-mkt-brand rounded-lg font-semibold
+           transition-all duration-200 cursor-pointer inline-flex items-center
+           justify-center gap-2 select-none shadow-sm;
+  }
+  .mkt-btn-ghost {
+    @apply text-mkt-body hover:text-mkt-ink font-medium transition-colors
+           duration-150 cursor-pointer inline-flex items-center gap-1.5;
+  }
+
+  /* Light card */
+  .mkt-card {
+    @apply bg-white border border-mkt-border rounded-2xl shadow-sm;
+  }
+
+  /* Eyebrow label */
+  .mkt-eyebrow {
+    @apply inline-flex items-center gap-2 text-xs font-bold uppercase
+           tracking-[0.14em] text-mkt-teal;
+  }
+
+  /* Gradient headline (light) */
+  .mkt-gradient {
+    @apply bg-gradient-to-r from-mkt-brand via-indigo-600 to-mkt-teal
+           bg-clip-text text-transparent;
+  }
+}
+
+/* Fading edge mask for logo/partner marquees */
+.marquee-mask {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+}
+
+/* Light dot-grid hero background */
+.mkt-dotgrid {
+  background-image: radial-gradient(circle, #cbd5e1 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.mkt-hero-glow {
+  background:
+    radial-gradient(60% 55% at 50% 0%, rgba(79,70,229,0.10) 0%, transparent 60%),
+    radial-gradient(40% 40% at 85% 20%, rgba(13,148,136,0.08) 0%, transparent 55%);
+}
+
+/* pause marquee on hover */
+.marquee-track:hover { animation-play-state: paused; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LIGHT-THEME COMPAT LAYER
+   Older marketing pages (features/pricing/about/contact/blog/legal) were built
+   with the dark design tokens (glass-card, btn-*, text-txt-*, bg-bg-*). Rather
+   than rewrite every class, we remap those tokens to light equivalents ONLY
+   inside .theme-light. The dark dashboard never gets .theme-light, so it is
+   completely unaffected.
+══════════════════════════════════════════════════════════════════════════ */
+.theme-light .glass-card {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  border-radius: 1rem;
+}
+
+/* text tokens → light ink */
+.theme-light .text-txt-primary   { color: #0f172a; }
+.theme-light .text-txt-secondary { color: #475569; }
+.theme-light .text-txt-muted     { color: #94a3b8; }
+
+/* surface/background tokens → light surfaces */
+.theme-light .bg-bg-base     { background-color: #ffffff; }
+.theme-light .bg-bg-surface  { background-color: #f8fafc; }
+.theme-light .bg-bg-elevated { background-color: #f1f5f9; }
+.theme-light .border-bg-border { border-color: #e2e8f0; }
+.theme-light .bg-bg-border   { background-color: #e2e8f0; }
+
+/* accent-muted chip bg needs more contrast on white */
+.theme-light .bg-accent-muted { background-color: rgba(79, 70, 229, 0.08); }
+.theme-light .text-accent     { color: #4f46e5; }
+
+/* buttons: remap dark btn-* to the light look */
+.theme-light .btn-primary {
+  background-color: #4f46e5;
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+.theme-light .btn-primary:hover { background-color: #4338ca; }
+.theme-light .btn-secondary {
+  background-color: #ffffff;
+  border-color: #e2e8f0;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.theme-light .btn-secondary:hover { color: #4f46e5; border-color: rgba(79, 70, 229, 0.4); }
+.theme-light .btn-ghost { color: #475569; }
+.theme-light .btn-ghost:hover { color: #0f172a; }
+
+/* inputs */
+.theme-light .input-search {
+  background-color: #ffffff;
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+
+/* gradient-text (dark used light-on-dark indigo) → richer on white */
+.theme-light .gradient-text {
+  background-image: linear-gradient(to right, #4f46e5, #4338ca, #0d9488);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* dark grid-glow is invisible/wrong on white → use the light hero glow */
+.theme-light .bg-grid-glow {
+  background-image:
+    radial-gradient(60% 55% at 50% 0%, rgba(79,70,229,0.08) 0%, transparent 60%);
+}
+
+/* left-accent answer/callout borders */
+.theme-light .border-accent { border-color: #4f46e5; }
+
+/* opacity-suffixed surface variants used in dashboard components */
+.theme-light .bg-bg-elevated\/40 { background-color: rgba(241, 245, 249, 0.6); }
+.theme-light .bg-bg-elevated\/30 { background-color: rgba(241, 245, 249, 0.5); }
+.theme-light .bg-bg-base\/80,
+.theme-light .bg-bg-base\/90 { background-color: rgba(255, 255, 255, 0.85); }
+.theme-light .bg-bg-surface\/40,
+.theme-light .bg-bg-surface\/30 { background-color: rgba(248, 250, 252, 0.7); }
+
+/* skeleton shimmer: dark gradient is invisible on white → light shimmer */
+.theme-light .skeleton-base {
+  background-color: #eef2f7;
+  background-image: linear-gradient(90deg, transparent 25%, rgba(15,23,42,0.05) 50%, transparent 75%);
+}
+
+/* streaming cursor on light bg */
+.theme-light .cursor-blink { background: #4f46e5; }
+
+/* status chip tints readable on white */
+.theme-light .bg-status-success\/10 { background-color: rgba(16, 185, 129, 0.12); }
+.theme-light .bg-status-warning\/10 { background-color: rgba(245, 158, 11, 0.14); }
+.theme-light .bg-status-error\/10   { background-color: rgba(239, 68, 68, 0.10); }
+.theme-light .bg-status-info\/10    { background-color: rgba(59, 130, 246, 0.10); }
+
+/* rank-tint chips (ProductCard badges) stay legible */
+.theme-light .bg-rank-gold\/10   { background-color: rgba(245, 158, 11, 0.14); }
+.theme-light .bg-rank-silver\/10 { background-color: rgba(100, 116, 139, 0.12); }
+.theme-light .bg-rank-bronze\/10 { background-color: rgba(205, 124, 47, 0.12); }

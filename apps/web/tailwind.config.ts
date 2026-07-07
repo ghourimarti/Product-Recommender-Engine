@@ -36,6 +36,23 @@ const config: Config = {
           secondary: "#94a3b8",
           muted:     "#64748b",
         },
+
+        /* ── Light marketing theme (constructor.com-style). Used only inside
+              the .theme-light marketing shell; the dark app tokens above are
+              untouched so the dashboard keeps its dark look. ── */
+        mkt: {
+          bg:        "#ffffff",   // page
+          surface:   "#f8fafc",   // subtle section background
+          elevated:  "#f1f5f9",   // cards on surface
+          border:    "#e2e8f0",   // hairlines
+          ink:       "#0f172a",   // primary text (near-black navy)
+          body:      "#475569",   // body text
+          muted:     "#94a3b8",   // muted text
+          brand:     "#4f46e5",   // primary indigo
+          "brand-d": "#4338ca",   // darker hover
+          teal:      "#0d9488",   // constructor-style teal accent
+          "teal-l":  "#14b8a6",
+        },
       },
       fontFamily: {
         sans:    ["var(--font-inter)", "system-ui", "sans-serif"],
@@ -59,6 +76,10 @@ const config: Config = {
           "0%":   { backgroundPosition: "-200% 0" },
           "100%": { backgroundPosition: "200% 0" },
         },
+        marquee: {
+          "0%":   { transform: "translateX(0)" },
+          "100%": { transform: "translateX(-50%)" },
+        },
       },
       animation: {
         "fade-up":    "fadeUp 0.4s ease-out forwards",
@@ -66,6 +87,8 @@ const config: Config = {
         "blink":      "blink 0.85s ease-in-out infinite",
         "shimmer":    "shimmer 2.2s linear infinite",
         "pulse-slow": "pulse 3s cubic-bezier(0.4,0,0.6,1) infinite",
+        "marquee":    "marquee 32s linear infinite",
+        "marquee-slow": "marquee 55s linear infinite",
       },
       backgroundImage: {
         "shimmer-gradient":

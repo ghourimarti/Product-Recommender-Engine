@@ -78,6 +78,7 @@ previous, so a bigger stack is always a superset of the smaller one.
 | `make full` | db + app + obs (everything, 15 services) | all four |
 | `make down` | stop + remove containers (keeps volumes) | all four |
 | `make downv` | stop + remove containers + **wipe named volumes** (destructive) | all four |
+| `make upv` | **from zero**: `downv` → build → start ALL tiers → seed catalog | all four |
 
 `make obs` includes Langfuse by default — one command brings up every telemetry surface. Use
 `make langfuse` only when you want the Langfuse subset in isolation (debugging its own boot,

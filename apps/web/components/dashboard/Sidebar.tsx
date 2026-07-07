@@ -17,15 +17,15 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden lg:flex flex-col w-60 shrink-0 border-r border-bg-border bg-bg-surface/40
+    <aside className="hidden lg:flex flex-col w-60 shrink-0 border-r border-mkt-border bg-white
                       fixed inset-y-0 left-0 z-40">
       {/* logo */}
-      <Link href="/" className="flex items-center gap-2 h-16 px-5 border-b border-bg-border group">
-        <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-purple-500
+      <Link href="/" className="flex items-center gap-2 h-16 px-5 border-b border-mkt-border group">
+        <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-mkt-brand to-mkt-teal
                          flex items-center justify-center group-hover:scale-105 transition-transform">
           <Zap className="w-4 h-4 text-white" />
         </span>
-        <span className="font-display font-bold text-lg text-txt-primary">ProductIQ</span>
+        <span className="font-display font-bold text-lg text-mkt-ink">ProductIQ</span>
       </Link>
 
       {/* nav */}
@@ -39,8 +39,8 @@ export function Sidebar() {
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors",
                 active
-                  ? "bg-accent-muted text-accent font-medium"
-                  : "text-txt-secondary hover:text-txt-primary hover:bg-bg-elevated",
+                  ? "bg-mkt-brand/10 text-mkt-brand font-semibold"
+                  : "text-mkt-body hover:text-mkt-ink hover:bg-mkt-surface",
               )}
             >
               <Icon className="w-4 h-4 shrink-0" />
@@ -52,15 +52,15 @@ export function Sidebar() {
 
       {/* upgrade card */}
       <div className="p-3">
-        <div className="rounded-xl border border-accent/20 bg-accent-muted p-4">
+        <div className="rounded-xl border border-mkt-brand/20 bg-gradient-to-br from-mkt-brand/5 to-mkt-teal/5 p-4">
           <div className="flex items-center gap-2 mb-1.5">
-            <Sparkles className="w-4 h-4 text-accent" />
-            <span className="text-sm font-medium text-txt-primary">Free plan</span>
+            <Sparkles className="w-4 h-4 text-mkt-brand" />
+            <span className="text-sm font-semibold text-mkt-ink">Free plan</span>
           </div>
-          <p className="text-xs text-txt-muted mb-3 leading-relaxed">
+          <p className="text-xs text-mkt-muted mb-3 leading-relaxed">
             Upgrade to Pro for unlimited searches and reranking.
           </p>
-          <Link href="/dashboard/billing" className="btn-primary w-full text-center py-2 text-xs">
+          <Link href="/dashboard/billing" className="mkt-btn-primary w-full text-center py-2 text-xs">
             Upgrade →
           </Link>
         </div>

@@ -1,7 +1,7 @@
 .PHONY: install lint fmt type test check \
         eval-ranking eval-rag eval-gate \
         serve build-backend \
-        db services app obs observability langfuse full up \
+        db services app obs observability langfuse full up upv \
         ps logs down downv seed bootstrap urls \
         helm-lint
 
@@ -13,6 +13,8 @@
 #                                         postgres/clickhouse/redis/minio])
 #   langfuse       = Langfuse stack ONLY (for isolated boot / debugging)
 #   full           = db + app + obs      (everything, 15 services)
+#   up             = alias for full      (backwards-compat)
+#   upv            = FROM ZERO — wipe volumes + build + start + seed catalog
 #   down / downv   = stop full stack (downv also wipes named volumes)
 #
 # All four compose files declare `name: p2-recommender`, so they share ONE
@@ -128,6 +130,30 @@ down:           ## Stop + remove containers (KEEPS named volumes)
 
 downv:          ## Stop + remove containers AND wipe all named volumes (DESTRUCTIVE)
 	$(DC_FULL) down -v
+
+upv:            ## FROM ZERO: downv + build + start ALL tiers + seed catalog (~5-8 min cold)
+	@echo ""
+	@echo "  make upv: cold bootstrap from empty volumes."
+	@echo "  Wipes: qdrant_data + langfuse_{postgres,clickhouse,redis,minio}_data + others."
+	@echo "  Rebuilds everything, re-seeds catalog, re-provisions Langfuse from .env INIT vars."
+	@echo ""
+	@echo "  [1/4] Wiping named volumes (make downv)..."
+	@$(DC_FULL) down -v
+	@echo ""
+	@echo "  [2/4] Starting data tier (Qdrant + DynamoDB + Redis) and waiting for health..."
+	@$(DC_DATA) up -d --wait
+	@echo ""
+	@echo "  [3/4] Seeding catalog into Qdrant (needs OPENAI_API_KEY for embeddings)..."
+	@$(MAKE) --no-print-directory seed
+	@echo ""
+	@echo "  [4/4] Building + starting app + observability + langfuse..."
+	@$(DC_FULL) up --build -d
+	@echo ""
+	@echo "  Cold bootstrap complete."
+	@echo "  Langfuse cold-start migrations continue for ~30-90s in the background;"
+	@echo "  the first /chat call may take a moment to trace, then it's steady-state."
+	@echo ""
+	@$(MAKE) --no-print-directory urls
 
 
 # ─── Data seeding  (run after the data tier is up) ────────────────────────────
