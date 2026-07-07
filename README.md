@@ -18,7 +18,7 @@
 [![Kubernetes](https://img.shields.io/badge/K8s-Helm%20%E2%86%92%20EKS-326CE5?style=flat-square&logo=kubernetes&logoColor=white)](#-deployment)
 [![Terraform](https://img.shields.io/badge/Terraform-EKS%2FDynamoDB%2FECR-7B42BC?style=flat-square&logo=terraform&logoColor=white)](#-deployment)
 
-[🚀 Quick Start](#-quick-start) · [✨ Features](#-features) · [🏗️ Architecture](#%EF%B8%8F-architecture) · [📡 API](#-api-reference) · [🐳 Deployment](#-deployment)
+[🚀 Quick Start](#-quick-start) · [🧰 Make Commands](#-make-commands) · [✨ Features](#-features) · [🏗️ Architecture](#%EF%B8%8F-architecture) · [📡 API](#-api-reference) · [🐳 Deployment](#-deployment)
 
 </div>
 
@@ -37,13 +37,6 @@ retrieves candidate products from Qdrant (dense + sparse), ranks them with a ble
 `semantic relevance × average rating × review-volume confidence`, and an LLM writes the *"why"* —
 **only ever the reasons**, never the product facts, so an injected review can't change what gets
 recommended.
-
-It started as a bootcamp Streamlit/Flask demo — one LLM call over raw reviews, a shared in-memory
-chat session that leaked across users, a metrics counter that measured page loads, no tests, no
-auth, no resilience. It was rebuilt, **decision by decision**, into a deployable service. The full
-journey is in [`docs/decision-log.md`](docs/decision-log.md) (24 architecture decisions),
-[`docs/transformation-plan.md`](docs/transformation-plan.md) (18-step plan), and
-[`docs/how-to-verify.md`](docs/how-to-verify.md) (run every step yourself).
 
 
 ---
@@ -223,15 +216,27 @@ make eval-rag                    # answer-quality (custom LLM judge)         →
 ```
 
 ### 4 · Run the full stack — **Docker (recommended)**
+
+**Fastest path — one command, from empty to fully seeded:**
 ```bash
-make bootstrap    # app tier up (data + api + web), catalog indexed, URLs printed
-make up         # everything: data + app + observability + Langfuse (15 services)
+make upv          # FROM ZERO: wipe volumes → build → start ALL 15 services → seed catalog
 make urls         # print every UI URL (ports read from .env)
 ```
-> **One tier at a time:** `make db` → `make app` → `make obs` (adds Jaeger/Prometheus/Grafana/
-> RedisInsight/Langfuse). **Langfuse alone:** `make langfuse` (cold start ~1–3 min: ClickHouse +
-> migrations). **Lifecycle:** `make ps` · `make logs` · `make down` (keep volumes) · `make downv`
-> (wipe volumes).
+> `upv` is the cold-boot button: it wipes named volumes, brings up the data tier and waits for
+> health, seeds the catalog into Qdrant (needs `OPENAI_API_KEY`), then builds + starts the app and
+> observability/Langfuse tiers. Expect **~5–8 min** on a cold machine (Langfuse migrations continue
+> ~30–90 s in the background after it returns).
+
+**Or bring it up tier by tier** (start small, layer up — all tiers share one Docker project):
+```bash
+make db           # tier 1 — data stores:  Qdrant + DynamoDB-local + Redis
+make seed         # index the catalog into Qdrant  (run once, after db is up)
+make app          # tier 2 — build + start API + web  (data + app)
+make obs          # tier 3 — Jaeger + Prometheus + Grafana + RedisInsight + Langfuse
+make urls         # print every UI URL
+```
+
+📋 **Full command reference is in [Make Commands](#-make-commands) below.**
 
 **Service map** (host ports from `.env`):
 
@@ -273,6 +278,85 @@ curl -N -X POST localhost:2011/chat -H "Authorization: Bearer $TOKEN" \
 ```
 > In the browser open **http://localhost:2012** → sign in (Clerk, or dev mode) → ask a question →
 > watch the **cards appear first**, then the explanation **stream in**.
+
+---
+
+## 🧰 Make Commands
+
+Everything is driven by the `Makefile`. The containerised stack is **four compose files under one
+Docker project** (`p2-recommender`), so the tiers share one network and can be started
+independently. All targets read host ports + secrets from `.env` (`--env-file .env`).
+
+### Stack lifecycle (Docker)
+
+| Command | What it does |
+|---|---|
+| `make db` | **Tier 1 — data stores.** Qdrant + DynamoDB-local + Redis (nothing else needed to develop against). |
+| `make app` | **Tier 2 — the app.** Builds + starts API + web on top of the data tier (`data + app`). |
+| `make obs` | **Tier 3 — observability.** Jaeger + Prometheus + Grafana + RedisInsight + Langfuse (10 svc). |
+| `make langfuse` | **Langfuse only** (web/worker/postgres/clickhouse/redis/minio) — for isolated LLM-trace debugging. |
+| `make full` / `make up` | **Everything** — data + app + observability + Langfuse (15 services), built + started. |
+| `make upv` | **FROM ZERO** — wipe volumes → build → start all tiers → **seed catalog**. The cold-boot button (~5–8 min). |
+| `make bootstrap` | App tier up + catalog indexed + URLs printed (no observability). |
+| `make ps` | Status of every container in the stack. |
+| `make logs` | Tail logs for the whole stack (Ctrl-C to stop). |
+| `make urls` | Print every host-side UI URL (ports sourced from `.env`). |
+
+### Shutdown & erase
+
+| Command | What it does |
+|---|---|
+| `make down` | Stop + remove containers. **Keeps** named volumes (your Qdrant index + history survive). |
+| `make downv` | Stop + remove containers **and wipe all named volumes** — ⚠️ **DESTRUCTIVE** (full erase). |
+| `make upv` | Complete reset **and** rebuild + reseed in one go (`downv` → build → start → seed). |
+
+> **Keep vs erase:** `down` is a normal stop you resume with `make app`/`make up` (data intact).
+> `downv` is the "delete everything and start clean" reset — you'll need `make seed` (or `make upv`)
+> to re-index the catalog afterwards.
+
+### Data & quality
+
+| Command | What it does |
+|---|---|
+| `make seed` | Aggregate reviews → products, then embed + index into Qdrant (run after `make db`). |
+| `make test` | Run the pytest suite. |
+| `make lint` | Ruff lint + format check. |
+| `make type` | mypy (strict) on `packages` / `apps` / `tests`. |
+| `make check` | **The green gate** — `lint` + `type` + `test` together. |
+| `make eval-ranking` | Retrieval + ranking eval (NDCG@3 / MRR / Recall@3). |
+| `make eval-rag` | Answer-quality eval (custom LLM judge). |
+| `make eval-gate` | CI eval gate — blocks a merge on ranking regression vs baseline. |
+
+### Native dev (no Docker for the app)
+
+| Command | What it does |
+|---|---|
+| `make install` | Sync the `uv` workspace (provisions Python 3.12 + deps). |
+| `make serve` | Run the API on the host with `--reload` (port 2011; needs `make db` first). |
+| `make build-backend` | Build the API Docker image (multi-stage, non-root). |
+| `make helm-lint` | Lint the Helm chart + validate rendered manifests (needs `helm` + `kubeconform`). |
+
+### Common workflows
+
+```bash
+# First run, everything, from nothing:
+make upv                 # wipe + build + start all 15 services + seed catalog
+make urls                # then open http://localhost:2012
+
+# Day-to-day (data intact between sessions):
+make app                 # start API + web (data tier auto-included)
+make down                # stop for the day — KEEPS your indexed data
+
+# Add dashboards when you want them:
+make obs                 # Jaeger / Prometheus / Grafana / Langfuse
+
+# Nuke and start clean:
+make downv               # ⚠️ erase all volumes
+make upv                 # rebuild + reseed from scratch
+
+# Before pushing code:
+make check               # lint + types + tests (the green gate)
+```
 
 ---
 
