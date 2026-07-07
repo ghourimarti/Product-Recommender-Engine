@@ -63,14 +63,14 @@ recommended.
 
 <div align="center">
 
-### Landing
-![Landing](screenshots/landing.png)
-
-### Discover — cards-first streaming
-![Discover](screenshots/discover.png)
+### Landing Page
+![Landing](screenshots/landingpage.png)
 
 ### Dashboard
-![Dashboard](screenshots/dashboard.png)
+![Dashboard](screenshots/dash.png)
+
+### Search
+![Search](screenshots/search.png)
 
 </div>
 
