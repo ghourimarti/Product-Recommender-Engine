@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎧 ProductIQ — Conversational Product Recommender
+# ProductIQ — Conversational Product Recommender
 
 ### Rating-Aware Recommendations, Grounded in Real Customer Reviews
 
