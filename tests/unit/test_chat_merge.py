@@ -1,4 +1,4 @@
-"""Unit tests for chat merge + provider selection (Step 6). Pure, no LLM/services."""
+"""Unit tests for chat merge + provider selection. Pure, no LLM/services."""
 
 from __future__ import annotations
 

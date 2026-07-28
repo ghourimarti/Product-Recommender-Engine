@@ -1,4 +1,4 @@
-"""Unit tests for observability wiring (Step 11). Graceful-degradation paths; no network."""
+"""Unit tests for observability wiring. Graceful-degradation paths; no network."""
 
 from __future__ import annotations
 

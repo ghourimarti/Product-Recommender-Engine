@@ -1,4 +1,4 @@
-"""Integration test: end-to-end chat with a real LLM + Qdrant (Step 6).
+"""Integration test: end-to-end chat with a real LLM + Qdrant.
 
 Skips unless an LLM key is configured and Qdrant is reachable.
 """

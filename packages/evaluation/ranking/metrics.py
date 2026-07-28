@@ -1,4 +1,4 @@
-"""Ranking-quality metrics for the recommender eval (Step 5). Pure, binary-relevance.
+"""Ranking-quality metrics for the recommender eval. Pure, binary-relevance.
 
 - Recall@k : fraction of the relevant set retrieved in the top-k.
 - NDCG@k   : ranking quality (position-discounted), normalized to [0, 1].

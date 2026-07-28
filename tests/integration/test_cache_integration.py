@@ -1,11 +1,11 @@
-"""Integration tests for the cache layers against real Redis + Qdrant (Step 9)."""
+"""Integration tests for the cache layers against real Redis + Qdrant."""
 
 from __future__ import annotations
 
-import socket
 import uuid
 
 import pytest
+from tests.conftest import qdrant_reachable, redis_reachable
 
 from core.cache import RedisCache, clear_version_memo, make_redis
 from core.config import get_settings
@@ -17,18 +17,6 @@ from retrieval.semantic_cache import SemanticCache
 from retrieval.store import QdrantHybridStore
 
 pytestmark = pytest.mark.integration
-
-
-def _reachable(port: int) -> bool:
-    sock = socket.socket()
-    sock.settimeout(1.0)
-    try:
-        sock.connect(("localhost", port))
-        return True
-    except OSError:
-        return False
-    finally:
-        sock.close()
 
 
 def _ranked(product_id: str) -> RankedProduct:
@@ -47,7 +35,7 @@ def _ranked(product_id: str) -> RankedProduct:
 
 
 def test_semantic_cache_roundtrip() -> None:
-    if not get_settings().openai_api_key or not _reachable(6333):
+    if not get_settings().openai_api_key or not qdrant_reachable():
         pytest.skip("needs OPENAI_API_KEY + Qdrant")
     embeddings = get_dense_embeddings()
     semantic = SemanticCache()
@@ -66,7 +54,7 @@ def test_semantic_cache_roundtrip() -> None:
 
 
 def test_cached_recommend_response_cache() -> None:
-    if not get_settings().openai_api_key or not _reachable(6333) or not _reachable(6379):
+    if not get_settings().openai_api_key or not qdrant_reachable() or not redis_reachable():
         pytest.skip("needs OPENAI_API_KEY + Qdrant + Redis")
     QdrantHybridStore().index(load_catalog())
     clear_version_memo()

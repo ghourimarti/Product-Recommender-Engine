@@ -40,14 +40,18 @@ FROM node:22-slim AS runtime
 WORKDIR /app
 # WEB_PORT is env-driven end-to-end (see .env / docker-compose). Default 2012.
 ARG WEB_PORT=2012
-ENV WEB_PORT=${WEB_PORT} NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
+ENV WEB_PORT=${WEB_PORT} NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0
 # CLERK_SECRET_KEY is supplied at runtime (server-side middleware) via compose env.
 RUN useradd -m -u 10001 webuser
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/next.config.mjs ./next.config.mjs
+
+# Standalone output (next.config.mjs `output: "standalone"`): copy ONLY the traced server plus
+# static assets, instead of the whole node_modules tree. Previously the runtime shipped every dev
+# dependency, giving a 1.29 GB image.
+COPY --from=builder --chown=webuser:webuser /app/.next/standalone ./
+COPY --from=builder --chown=webuser:webuser /app/.next/static ./.next/static
+# (no public/ dir in this app — nothing to copy)
+
 USER webuser
 EXPOSE ${WEB_PORT}
-# Shell form so ${WEB_PORT} is expanded at container start.
-CMD node node_modules/next/dist/bin/next start -p ${WEB_PORT}
+# server.js is emitted by the standalone build and reads PORT/HOSTNAME.
+CMD PORT=${WEB_PORT} node server.js

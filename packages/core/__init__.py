@@ -1,11 +1,8 @@
-"""Core package — shared Pydantic schemas, prompts, LLM/embedding clients, chain.
-
-Real logic lands in later transformation steps (Steps 2, 6, 9, 12).
-"""
+"""Core package: shared Pydantic schemas, prompts, and LLM/embedding clients."""
 
 __version__ = "0.1.0"
 
 
 def healthcheck() -> str:
-    """Return a readiness marker; replaced with real logic in later steps."""
+    """Return a readiness marker."""
     return "core ok"

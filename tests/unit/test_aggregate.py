@@ -1,4 +1,4 @@
-"""Unit tests for review -> product aggregation (Step 2). Pure, no disk I/O."""
+"""Unit tests for review -> product aggregation. Pure, no disk I/O."""
 
 from __future__ import annotations
 

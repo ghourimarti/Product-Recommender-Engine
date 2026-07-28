@@ -35,8 +35,9 @@ export function HomeHero() {
                          px-3 py-1.5 text-xs font-medium text-mkt-body shadow-sm mb-6"
             >
               <Award className="w-3.5 h-3.5 text-mkt-teal" />
-              Rated 4.8/5 by 2,400+ users
-              <span className="text-mkt-brand font-semibold">Read reviews →</span>
+              {/* "Rated 4.8/5 by 2,400+ users" was fabricated — there are no users. */}
+              Live offers, ranked on real ratings &amp; review volume
+              <span className="text-mkt-brand font-semibold">See how →</span>
             </motion.div>
 
             <motion.h1

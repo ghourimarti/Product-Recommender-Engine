@@ -1,4 +1,4 @@
-"""Unit tests for caching (Step 9) using fakeredis. No external services."""
+"""Unit tests for caching using fakeredis. No external services."""
 
 from __future__ import annotations
 
@@ -65,11 +65,15 @@ def test_cached_embed_query_uses_cache(cache: RedisCache) -> None:
 
 
 class _FakeStore:
-    def __init__(self) -> None:
+    def __init__(self, similarity: float = 0.9) -> None:
         self.search_calls = 0
+        self._similarity = similarity
 
     def index(self, products: list[Any]) -> None:
         return None
+
+    def max_dense_similarity(self, query_vector: list[float]) -> float:
+        return self._similarity
 
     def search(self, query: str, k: int = 5) -> list[RetrievedProduct]:
         self.search_calls += 1
@@ -95,6 +99,24 @@ class _NoSemanticCache:
         self, query_vector: list[float], version: str, query: str, result: RankingResult
     ) -> None:
         return None
+
+
+def test_no_match_when_similarity_below_floor(cache: RedisCache) -> None:
+    """F6: an off-topic query (e.g. 'refrigerator') must be rejected, not answered."""
+    store, semantic, embeddings = _FakeStore(similarity=0.14), _NoSemanticCache(), _FakeEmbeddings()
+    result = cached_recommend(
+        "refrigerator with ice maker", store, cache, semantic, embeddings, k=3
+    )
+    assert result.no_match is True
+    assert result.products == []
+    assert store.search_calls == 0  # gated before retrieval even runs
+
+
+def test_match_when_similarity_above_floor(cache: RedisCache) -> None:
+    store, semantic, embeddings = _FakeStore(similarity=0.47), _NoSemanticCache(), _FakeEmbeddings()
+    result = cached_recommend("bass headphones", store, cache, semantic, embeddings, k=3)
+    assert result.no_match is False
+    assert result.products
 
 
 def test_cached_recommend_l3_hit_and_invalidation(cache: RedisCache) -> None:

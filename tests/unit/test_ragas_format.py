@@ -1,4 +1,4 @@
-"""Unit test for RAGAS answer formatting + golden loading (Step 7). Pure, no services."""
+"""Unit test for RAGAS answer formatting + golden loading. Pure, no services."""
 
 from __future__ import annotations
 

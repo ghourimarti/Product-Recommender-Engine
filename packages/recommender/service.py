@@ -1,7 +1,7 @@
 """Recommendation orchestration: retrieve (Qdrant hybrid) -> rank (rating-aware blend).
 
 Depends only on the ``VectorStore`` protocol, so it is unit-testable with a fake store
-and reusable from the API (Step 8) and the LangChain chain (Step 6).
+and reusable from the API and the LangChain chain.
 """
 
 from __future__ import annotations

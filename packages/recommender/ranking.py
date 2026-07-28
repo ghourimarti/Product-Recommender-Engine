@@ -1,4 +1,4 @@
-"""Rating-aware ranking blend — turns retrieval results into recommendations (Decision 3).
+"""Rating-aware ranking blend: turns retrieval results into recommendations.
 
 This is the recommender's core. It combines three signals:
 
@@ -21,7 +21,7 @@ from core.models import RankedProduct, RankingResult, RetrievedProduct
 
 
 class RankingConfig(BaseModel):
-    """Tunable ranking weights (A/B-able later via GrowthBook, Decision 19)."""
+    """Tunable ranking weights."""
 
     relevance_weight: float = Field(default=0.7, ge=0.0, le=1.0)
     rating_weight: float = Field(default=0.3, ge=0.0, le=1.0)

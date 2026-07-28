@@ -5,11 +5,19 @@ import { Container, SectionHeading } from "./primitives";
 
 type Metric = { value: number; prefix?: string; suffix?: string; decimals?: number; label: string };
 
+/* Every number here must be one we have actually measured and can reproduce on demand.
+   The previous set ("10,000+ products", "500k+ reviews", "98.9% uptime") was fabricated:
+   the catalog is 9 seed products plus live Google-Shopping offers, and uptime has never been
+   measured (there is no SLO monitor). Those claims are gone. What replaces them is real:
+     7.6ms  — p95 of a cached /recommend under k6 at 50 VUs
+     66%    — observed cache hit rate (target >= 60%)
+     3      — Groq -> OpenAI -> Anthropic, automatic failover (verified by killing the primary)
+     107    — automated tests, green in CI                                                     */
 const METRICS: Metric[] = [
-  { value: 10000, suffix: "+",  label: "Products indexed" },
-  { value: 500,   suffix: "k+", label: "Reviews analyzed" },
-  { value: 800,   prefix: "<", suffix: "ms", label: "Median response" },
-  { value: 98.9,  suffix: "%",  label: "Uptime SLO", decimals: 1 },
+  { value: 7.6,   suffix: "ms", label: "p95 cached response", decimals: 1 },
+  { value: 66,    suffix: "%",  label: "Cache hit rate (repeat queries are free)" },
+  { value: 3,     suffix: "",   label: "LLM providers, automatic failover" },
+  { value: 107,   suffix: "",   label: "Automated tests in CI" },
 ];
 
 function useCountUp(target: number, decimals = 0, run = false) {
@@ -43,8 +51,8 @@ function Stat({ m, run }: { m: Metric; run: boolean }) {
 }
 
 export function MetricsBar({
-  eyebrow = "By the numbers",
-  title = "Built to perform at scale",
+  eyebrow = "Measured, not claimed",
+  title = "Every number here is reproducible",
 }: { eyebrow?: string; title?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [run, setRun] = useState(false);

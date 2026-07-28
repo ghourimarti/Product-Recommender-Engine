@@ -1,40 +1,103 @@
-# Prometheus alerting rules (Decision 13/20). Load via Alertmanager -> PagerDuty/Slack.
-# Metric names match the app's Prometheus instrumentation (apps/api/main.py) + Langfuse exporters.
+# Prometheus alert rules — loaded via `rule_files` in infra/compose/prometheus.yml.
+#
+# NOTE: this file previously existed but was NEVER loaded (prometheus.yml had no `rule_files`
+# section), so no alert could ever fire. It is now mounted and loaded.
+#
+# Rules are ordered by what actually kills THIS product:
+#   1. SerpApi quota (250/month) is the binding constraint — not compute.
+#   2. A dead shopping source used to be indistinguishable from "no results" — alert on it.
+#   3. Redis sits on the hot path; its failure used to hang requests.
+# Alert on metrics the app really exports (no invented series).
+
 groups:
-  - name: p2-recommender-slo
+  - name: p2-cost
     rules:
+      - alert: SerpApiBudgetBurnHigh
+        expr: increase(serpapi_searches_total[24h]) > 30
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "SerpApi spend high ({{ $value | printf \"%.0f\" }} searches/24h)"
+          description: "Free plan is 250 searches per MONTH. At this rate the quota dies early."
+
+      - alert: SerpApiBudgetExhausted
+        expr: increase(source_unavailable_total{reason="budget_exhausted"}[15m]) > 0
+        for: 0m
+        labels: { severity: critical }
+        annotations:
+          summary: "SerpApi budget exhausted — live search is DOWN for all users"
+          description: "Aggregator is serving degraded responses. Raise budget or wait for reset."
+
+      - alert: CacheHitRateLow
+        expr: |
+          sum(rate(cache_hits_total[30m]))
+            / clamp_min(sum(rate(cache_hits_total[30m])) + sum(rate(cache_misses_total[30m])), 0.001)
+            < 0.5
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "Cache hit rate below 50% (target >= 60%)"
+          description: "Every aggregate miss costs a paid SerpApi search."
+
+  - name: p2-availability
+    rules:
+      # The alert that would have caught "outage looks like no-match".
+      - alert: ShoppingSourceUnavailable
+        expr: increase(source_unavailable_total{reason="source_error"}[10m]) > 3
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "Shopping source failing — users are seeing a degraded experience"
+
+      - alert: ApiDown
+        expr: up{job="p2-api"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "API is down / not scrapeable"
+
       - alert: HighErrorRate
         expr: |
           sum(rate(http_requests_total{status=~"5.."}[5m]))
-            / sum(rate(http_requests_total[5m])) > 0.02
+            / clamp_min(sum(rate(http_requests_total[5m])), 0.001) > 0.01
         for: 5m
-        labels: { severity: page }
+        labels: { severity: critical }
         annotations:
-          summary: "5xx rate > 2% (SLO breach)"
+          summary: "5xx rate above 1% (burning the 99.9% error budget)"
 
-      - alert: HighLatencyP95
-        expr: |
-          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 2
-        for: 10m
-        labels: { severity: page }
-        annotations:
-          summary: "p95 latency > 2s (SLO target)"
-
-      - alert: LowCacheHitRate
-        expr: |
-          sum(rate(cache_hits_total[15m]))
-            / (sum(rate(cache_hits_total[15m])) + sum(rate(cache_misses_total[15m]))) < 0.6
-        for: 30m
-        labels: { severity: warn }
-        annotations:
-          summary: "Cache hit-rate < 60% (cost target at risk)"
-
-  - name: p2-recommender-cost
+  - name: p2-latency
     rules:
-      # Emitted from Langfuse cost export (per Decision 20). Threshold tuned per budget.
-      - alert: LLMCostPerHourHigh
-        expr: llm_cost_usd_per_hour > 5
+      - alert: LatencyP95High
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, path) (rate(http_request_duration_seconds_bucket[5m]))) > 4
         for: 10m
-        labels: { severity: page }
+        labels: { severity: warning }
         annotations:
-          summary: "LLM spend/hour over budget — consider kill-switch (LLM_ENABLED=false)"
+          summary: "p95 latency > 4s on {{ $labels.path }}"
+          description: "A sustained spike usually means Redis or the shopping source is sick."
+
+  - name: p2-quality-and-abuse
+    rules:
+      # A sudden rise in "we have nothing" usually means RETRIEVAL is broken, not that users
+      # got fussy. Treat it as a quality alarm, not a user-behaviour statistic.
+      - alert: NoMatchRateSpike
+        expr: increase(no_match_total[15m]) > 20
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "no_match spike — retrieval may be broken"
+
+      - alert: GuardrailBlocksSpike
+        expr: increase(guardrail_blocks_total[15m]) > 10
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Prompt-injection guardrail firing repeatedly — possible active probing"
+
+      - alert: RateLimitStorm
+        expr: sum(rate(http_requests_total{status="429"}[5m])) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Sustained 429s — someone is hammering the API"

@@ -1,0 +1,12 @@
+# Grafana datasource provisioning.
+# Grafana previously booted EMPTY — no datasource, no dashboards — so its panels could not query
+# anything and it was useless to open. Provisioned as code so it survives volume wipes.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090   # container-name resolution on the shared compose network
+    isDefault: true
+    editable: false

@@ -1,4 +1,4 @@
-"""Integration test: DynamoDB chat history per-user isolation + persistence (Step 8).
+"""Integration test: DynamoDB chat history per-user isolation + persistence.
 
 Skips unless DynamoDB-local is reachable at DYNAMODB_ENDPOINT.
 """

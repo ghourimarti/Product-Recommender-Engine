@@ -15,7 +15,7 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
-# VPC + EKS via the well-maintained community modules (Decision 14/15).
+# VPC + EKS via the well-maintained community modules.
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~> 5.0"

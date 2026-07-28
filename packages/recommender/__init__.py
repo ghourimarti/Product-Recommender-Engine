@@ -1,7 +1,4 @@
-"""Recommender package — rating-aware ranking blend over retrieval results.
-
-Real logic lands in Step 4.
-"""
+"""Recommender package: rating-aware ranking blend over retrieval results."""
 
 __version__ = "0.1.0"
 

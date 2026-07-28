@@ -4,11 +4,12 @@ import {
   ArrowRight, Check, Brain,
 } from "lucide-react";
 import { MarketingShell } from "@/components/MarketingShell";
+import { DemoNotice } from "@/components/marketing/DemoNotice";
 import { HomeHero } from "@/components/marketing/HomeHero";
-import { LogoCloud } from "@/components/marketing/LogoCloud";
 import { MetricsBar } from "@/components/marketing/MetricsBar";
-import { TestimonialCarousel } from "@/components/marketing/TestimonialCarousel";
 import { Container, Reveal, SectionHeading } from "@/components/marketing/primitives";
+// LogoCloud ("trusted by" + invented brand names) and TestimonialCarousel (invented quotes) are
+// deliberately NOT rendered: they are fabricated social proof for a product with zero users.
 import { SOLUTIONS } from "@/lib/nav";
 
 /* icon lookup for solutions (nav stores component refs already) */
@@ -23,9 +24,9 @@ const CONNECTED = [
 export default function LandingPage() {
   return (
     <MarketingShell>
-      <HomeHero />
+      <DemoNotice />
 
-      <LogoCloud />
+      <HomeHero />
 
       {/* ── Product / capability grid ── */}
       <section id="capabilities" className="py-24">
@@ -140,8 +141,6 @@ export default function LandingPage() {
       </section>
 
       <MetricsBar />
-
-      <TestimonialCarousel />
 
       {/* ── Final CTA ── */}
       <section className="py-24">

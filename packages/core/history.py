@@ -1,4 +1,4 @@
-"""Per-user chat history in DynamoDB single-table (Decision 1) + GDPR deletion/export (D24).
+"""Per-user chat history in DynamoDB single-table, with GDPR deletion/export.
 
 Isolation is structural: the partition key is the user id, so user A's query can never return
 user B's messages. All of a user's data lives under one partition, which makes account-level
@@ -12,6 +12,7 @@ Item shape (single-table):
 
 from __future__ import annotations
 
+import contextlib
 import time
 import uuid
 from typing import Any
@@ -71,11 +72,27 @@ class DynamoChatHistory:
             BillingMode="PAY_PER_REQUEST",
         )
         client.get_waiter("table_exists").wait(TableName=self._table_name)
+        # Enable TTL so the `ttl` attribute written by add_message actually expires items.
+        # (Terraform sets this for the real table; local/dev needs it too or retention is inert.)
+        with contextlib.suppress(Exception):  # not supported by every DynamoDB-local build
+            client.update_time_to_live(
+                TableName=self._table_name,
+                TimeToLiveSpecification={"Enabled": True, "AttributeName": "ttl"},
+            )
 
     def add_message(self, user_id: str, session_id: str, role: str, content: str) -> None:
         sort_key = f"{_session_prefix(session_id)}{time.time_ns()}#{uuid.uuid4().hex[:8]}"
         self._table().put_item(
-            Item={"PK": _user_pk(user_id), "SK": sort_key, "role": role, "content": content}
+            Item={
+                "PK": _user_pk(user_id),
+                "SK": sort_key,
+                "role": role,
+                "content": content,
+                # Retention: DynamoDB TTL only expires items that carry a ttl attribute. The
+                # table has TTL configured in Terraform, but nothing expires unless we write
+                # this field. Epoch seconds; DynamoDB deletes the item some time after it passes.
+                "ttl": int(time.time()) + self._settings.chat_retention_days * 86400,
+            }
         )
 
     def get_messages(self, user_id: str, session_id: str, limit: int = 20) -> list[BaseMessage]:
@@ -112,12 +129,12 @@ class DynamoChatHistory:
         return self._delete_items(response.get("Items", []))
 
     def delete_user(self, user_id: str) -> int:
-        """Right-to-be-forgotten (Decision 24): delete ALL of a user's data. Returns count."""
+        """Right-to-be-forgotten: delete all of a user's data. Returns count."""
         response = self._table().query(KeyConditionExpression=Key("PK").eq(_user_pk(user_id)))
         return self._delete_items(response.get("Items", []))
 
     def export_user(self, user_id: str) -> list[dict[str, str]]:
-        """DSAR (Decision 24): export all of a user's stored messages as plain records."""
+        """Export all of a user's stored messages as plain records (DSAR)."""
         response = self._table().query(KeyConditionExpression=Key("PK").eq(_user_pk(user_id)))
         return [
             {

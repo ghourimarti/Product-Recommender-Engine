@@ -31,10 +31,10 @@ dependencies = [
     "langfuse>=2,<3",
     "httpx>=0.27",  # SerpApi client (live shopping aggregator source)
 ]
-# NOTE: RAGAS was the Decision-19 choice but every ragas release hard-imports
+# NOTE: RAGAS was the intended choice but every ragas release hard-imports
 # langchain_community.chat_models.vertexai (removed in langchain-community for
 # langchain-core>=0.3, which our LLM stack requires) -> unresolvable conflict.
-# Step 7 uses an equivalent custom LLM-judge harness (same metrics) instead.
+# We use an equivalent custom LLM-judge harness (same metrics) instead.
 
 [build-system]
 requires = ["hatchling"]
@@ -78,7 +78,7 @@ explicit_package_bases = true
 mypy_path = ["packages", "apps"]
 
 [tool.pytest.ini_options]
-pythonpath = ["packages", "apps"]
+pythonpath = ["packages", "apps", "."]  # "." so tests/ is importable (shared conftest helpers)
 testpaths = ["tests"]
 asyncio_mode = "auto"
 markers = [

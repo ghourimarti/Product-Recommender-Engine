@@ -1,4 +1,4 @@
-"""Unit tests for the CI eval-gate decision logic (Step 18). Pure, no services."""
+"""Unit tests for the CI eval-gate decision logic. Pure, no services."""
 
 from __future__ import annotations
 

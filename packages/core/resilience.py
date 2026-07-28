@@ -1,4 +1,4 @@
-"""A minimal circuit breaker (Decision 21).
+"""A minimal circuit breaker.
 
 After ``fail_max`` consecutive failures the breaker opens and callers skip the failing
 dependency (serving a degraded path) until ``reset_timeout`` elapses, when one trial call is

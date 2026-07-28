@@ -1,4 +1,4 @@
-"""JWT authentication (Decision 9).
+"""JWT authentication.
 
 Two verification modes, chosen by config:
 - ``clerk_jwks_url`` set  -> verify Clerk-issued RS256 tokens against the JWKS endpoint.

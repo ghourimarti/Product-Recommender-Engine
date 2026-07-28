@@ -30,7 +30,8 @@ export const SOLUTION_CONTENT: SolutionContent[] = [
       "A hybrid retriever combines dense (semantic) and sparse (keyword) signals.",
       "Top candidates pass to the ranking layer for quality-aware ordering.",
     ],
-    metric: { value: "10,000+", label: "products searchable by meaning" },
+    // Was "10,000+ products" — fabricated. Offers are fetched live per query.
+    metric: { value: "Live", label: "offers fetched per query, ranked on evidence" },
   },
   {
     slug: "rating-intelligence",
@@ -48,7 +49,9 @@ export const SOLUTION_CONTENT: SolutionContent[] = [
       "That quality score is blended with semantic relevance to your query.",
       "Results are ordered by the blend — fit and trust together.",
     ],
-    metric: { value: "500k+", label: "reviews weighted intelligently" },
+    // Was "500k+ reviews" — fabricated. Ranking weights each offer's real rating by its
+    // real review count, whatever that count happens to be.
+    metric: { value: "Rating × volume", label: "how every result is ranked" },
   },
   {
     slug: "ai-explanations",
@@ -120,7 +123,9 @@ export const SOLUTION_CONTENT: SolutionContent[] = [
       "Rate limits and circuit breakers guard upstream providers.",
       "On provider failure, the system degrades to ranked results without explanations.",
     ],
-    metric: { value: "99.9%", label: "designed availability" },
+    // Was "99.9% designed availability" — never measured. This IS verified: the API keeps
+    // serving (popularity-ranked) with the vector DB killed, and fails over across 3 LLM providers.
+    metric: { value: "Degrades", label: "keeps serving when the vector DB or LLM dies" },
   },
 ];
 

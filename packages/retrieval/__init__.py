@@ -1,7 +1,4 @@
-"""Retrieval package — Qdrant hybrid (dense + sparse) retrieval.
-
-Real logic lands in Step 3.
-"""
+"""Retrieval package: Qdrant hybrid (dense + sparse) retrieval."""
 
 __version__ = "0.1.0"
 

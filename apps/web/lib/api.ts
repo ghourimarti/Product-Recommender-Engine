@@ -46,7 +46,12 @@ export type AggregatorResult = {
   query: string;
   summary: string;
   offers: RankedOfferT[];
+  /** We searched successfully and nothing was relevant. */
   no_match: boolean;
+  /** The shopping source failed / the search budget is exhausted — an OUTAGE, not an empty result.
+   *  These used to be conflated, so a dead SerpApi looked exactly like "no products matched". */
+  source_unavailable?: boolean;
+  detail?: string;
 };
 
 /** Map a ranked live offer into the Recommendation shape ProductCard renders. */
@@ -85,6 +90,47 @@ export async function aggregate(
   });
   if (!response.ok) throw new Error(`aggregate request failed: ${response.status}`);
   return response.json() as Promise<AggregatorResult>;
+}
+
+/**
+ * Streaming aggregator: POST /aggregate/stream (SSE).
+ *
+ * Emits `offers` (ranked cards, no reasons yet) as soon as the shopping search returns, then
+ * `final` (same cards + grounded reasons + summary). The blocking `aggregate()` above made the
+ * user wait for the search AND the LLM before anything rendered (cold: 2.94s). This paints the
+ * cards ~1-1.5s earlier — and it is what makes the SSE path something the UI actually uses.
+ */
+export async function* streamAggregate(
+  query: string,
+  authToken?: string,
+  k = 6,
+  signal?: AbortSignal,
+): AsyncGenerator<SSEEvent> {
+  const token = authToken || DEV_TOKEN;
+  const response = await fetch(`${API_URL}/aggregate/stream`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ query, k }),
+    signal,
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`aggregate stream failed: ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const { events, rest } = parseSSEBuffer(buffer);
+    buffer = rest;
+    for (const event of events) yield event;
+  }
 }
 
 export type RecommendationsPayload = {

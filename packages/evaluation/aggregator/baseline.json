@@ -1,0 +1,7 @@
+{
+  "_comment": "Frozen baseline for the SHIPPED /aggregate ranking path. Recorded 2026-07-14 from evaluation.aggregator.run over 4 real SerpApi fixtures. must_beat_google asserts the product's core claim: our rating x review-volume blend orders offers BETTER than Google Shopping's own order (Google baseline: ndcg@3 0.824, mrr 0.875). If that stops being true, the aggregator has no reason to exist and CI should fail.",
+  "ndcg_at_3": 0.9413,
+  "mrr": 1.0,
+  "tolerance": 0.05,
+  "must_beat_google": true
+}

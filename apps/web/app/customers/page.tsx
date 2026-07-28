@@ -51,7 +51,9 @@ export default function CustomersPage() {
         subtitle="From electronics to home goods, product teams use ProductIQ to turn search into an assistant."
       />
 
-      <LogoCloud label="Powering discovery for" />
+      {/* These are invented brand names, not customers. Labelled honestly rather than
+          presented as "powering discovery for" real companies. */}
+      <LogoCloud label="Illustrative brands — this demo has no customers yet" />
 
       {/* case studies */}
       <section className="py-24">

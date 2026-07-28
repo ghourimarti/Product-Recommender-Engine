@@ -1,4 +1,4 @@
-"""Unit tests for JWT auth (Step 10). Dev HS256 mode; no Clerk/network."""
+"""Unit tests for JWT auth. Dev HS256 mode; no Clerk/network."""
 
 from __future__ import annotations
 

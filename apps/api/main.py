@@ -1,8 +1,8 @@
-"""FastAPI serving app (Step 8): /health, /metrics, /recommend, /chat (SSE).
+"""FastAPI serving app: /health, /metrics, /recommend, /chat (SSE).
 
 Clients (Qdrant store, DynamoDB history, LLM) are created lazily so /health and /metrics
 work with no external dependencies. /chat streams recommendation cards first, then the
-explanation token-by-token (Decision 8), and persists per-user history (Decision 1).
+explanation token-by-token, and persists per-user history.
 """
 
 from __future__ import annotations
@@ -31,8 +31,13 @@ from core.models import AggregatorResult, ChatRequest, Product, RankingResult, R
 from core.observability import configure_observability, get_langchain_callbacks
 from core.ratelimit import RateLimiter, RateLimitExceeded
 from core.resilience import CircuitBreaker
-from core.security import redact_pii
-from recommender.aggregator import aggregate
+from core.security import (
+    SAFE_EXPLANATION,
+    clean_user_text,
+    output_violates_policy,
+    redact_pii,
+)
+from recommender.aggregator import aggregate, aggregate_stream
 from recommender.resilient import resilient_recommend
 from retrieval.index import load_catalog
 from retrieval.semantic_cache import SemanticCache
@@ -42,6 +47,10 @@ logger = logging.getLogger("p2.api")
 
 REQUESTS = Counter("http_requests_total", "Total HTTP requests", ["method", "path", "status"])
 LATENCY = Histogram("http_request_duration_seconds", "Request latency (s)", ["path"])
+
+# Characters of generated text held back before release, so a system-prompt leak is caught by the
+# output guardrail before any of it reaches the client (leaked fragments are far shorter than this).
+GUARD_HOLDBACK = 200
 
 
 @lru_cache
@@ -98,15 +107,30 @@ def _breaker() -> CircuitBreaker:
     return CircuitBreaker()
 
 
-def require_user(authorization: str | None = Header(default=None)) -> str:
-    """Authenticated user id from the Bearer JWT (Decision 9).
+def dev_bypass_allowed(settings: Any) -> bool:
+    """Anonymous callers may assume the `dev-user` identity ONLY when all three hold.
 
-    In dev mode (no clerk_jwks_url set), unauthenticated requests get a default
-    dev-user identity so the frontend works without a token in .env.local.
+    Fail CLOSED: a missing/empty CLERK_JWKS_URL alone must never open the API. Requiring an
+    explicit opt-in (auth_dev_bypass) *and* app_env == "local" means a misconfigured deployment
+    returns 401 instead of silently serving every anonymous caller as one shared identity.
     """
+    return not settings.clerk_jwks_url and settings.app_env == "local" and settings.auth_dev_bypass
+
+
+def assert_auth_config_sane(settings: Any) -> None:
+    """Fail fast at startup rather than serve a non-local environment with no auth."""
+    if settings.app_env != "local" and not settings.clerk_jwks_url:
+        raise RuntimeError(
+            f"APP_ENV={settings.app_env!r} but CLERK_JWKS_URL is empty — refusing to start "
+            "an unauthenticated API. Set CLERK_JWKS_URL, or run with APP_ENV=local."
+        )
+
+
+def require_user(authorization: str | None = Header(default=None)) -> str:
+    """Authenticated user id from the Bearer JWT. Fails closed."""
     settings = get_settings()
     if not authorization or not authorization.startswith("Bearer "):
-        if not settings.clerk_jwks_url:
+        if dev_bypass_allowed(settings):
             return "dev-user"
         raise HTTPException(status_code=401, detail="missing bearer token")
     try:
@@ -168,9 +192,10 @@ def recommend_endpoint(
     req: RecommendRequest, user_id: str = Depends(rate_limited_user)
 ) -> RankingResult:
     """Sync, ranking-only path (no LLM) — the fast, 4-layer-cached recommendation list."""
-    logger.info("recommend user=%s query=%s", user_id, redact_pii(req.query))  # PII-safe log
+    query = clean_user_text(req.query)  # PII redacted + injection neutralised at the edge
+    logger.info("recommend user=%s query=%s", user_id, redact_pii(req.query))
     return resilient_recommend(
-        req.query,
+        query,
         _store(),
         _cache(),
         _semantic_cache(),
@@ -186,8 +211,32 @@ def aggregate_endpoint(
     req: RecommendRequest, user_id: str = Depends(rate_limited_user)
 ) -> AggregatorResult:
     """Live shopping aggregator: SerpApi search -> rank -> grounded reasons (cached)."""
+    query = clean_user_text(req.query)
     logger.info("aggregate user=%s query=%s", user_id, redact_pii(req.query))
-    return aggregate(req.query, _cache(), _model(), k=req.k, callbacks=list(_callbacks()))
+    return aggregate(query, _cache(), _model(), k=req.k, callbacks=list(_callbacks()))
+
+
+@app.post("/aggregate/stream")
+async def aggregate_stream_endpoint(
+    req: RecommendRequest, user_id: str = Depends(rate_limited_user)
+) -> StreamingResponse:
+    """SSE: emit ranked CARDS as soon as the search returns, then the grounded reasons.
+
+    The blocking /aggregate made the user stare at a skeleton for the search AND the LLM (cold:
+    2.94s, breaching the p95 < 2s NFR). Here the cards land ~1-1.5s earlier and the reasons fill
+    in afterwards — which is also what makes the SSE path something the UI actually uses.
+    """
+    query = clean_user_text(req.query)
+    logger.info("aggregate.stream user=%s query=%s", user_id, redact_pii(req.query))
+
+    async def event_stream() -> AsyncIterator[str]:
+        for stage, result in aggregate_stream(
+            query, _cache(), _model(), k=req.k, callbacks=list(_callbacks())
+        ):
+            yield _sse(stage, result.model_dump())
+        yield _sse("done", {})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @app.post("/chat")
@@ -201,11 +250,10 @@ async def chat_endpoint(
         llm_on = get_settings().llm_enabled
         callbacks = list(_callbacks())
         model = _model() if llm_on else None
+        query = clean_user_text(req.query)  # PII + injection scrubbed before ANY prompt/trace
         history = _history().get_messages(user_id, req.session_id) if llm_on else []
         standalone = (
-            rewrite_query(req.query, history, model, callbacks)
-            if (history and llm_on)
-            else req.query
+            rewrite_query(query, history, model, callbacks) if (history and llm_on) else query
         )
 
         result = resilient_recommend(
@@ -223,16 +271,25 @@ async def chat_endpoint(
             yield _sse("done", {"no_match": True})
             return
 
-        if not llm_on:  # kill-switch (Decision 20): cards served, LLM explanation disabled
+        if not llm_on:  # kill-switch: cards served, LLM explanation disabled
             yield _sse("done", {"no_match": False, "degraded": True})
             return
 
-        tokens: list[str] = []
+        # Output guardrail. Tokens are held back by GUARD_HOLDBACK characters so a
+        # system-prompt leak is detected BEFORE any of it is released to the client. On violation
+        # we stop generating and replace the answer with safe text.
+        buffer, released, blocked = "", 0, False
         try:
             async for token in astream_explanation(standalone, result.products, model, callbacks):
-                tokens.append(token)
-                yield _sse("token", {"text": token})
-        except Exception:  # all LLM providers failed -> static template (Decision 21)
+                buffer += token
+                if output_violates_policy(buffer):
+                    blocked = True
+                    break
+                safe_upto = max(0, len(buffer) - GUARD_HOLDBACK)
+                if safe_upto > released:
+                    yield _sse("token", {"text": buffer[released:safe_upto]})
+                    released = safe_upto
+        except Exception:  # all LLM providers failed -> static template
             logger.warning("explanation generation failed; serving template", exc_info=True)
             yield _sse(
                 "token",
@@ -240,10 +297,19 @@ async def chat_endpoint(
             )
             yield _sse("done", {"no_match": False, "degraded": True})
             return
+
+        if blocked:
+            logger.warning("guardrail: blocked prompt-leaking explanation user=%s", user_id)
+            yield _sse("guardrail", {"blocked": True, "reason": "prompt_leak"})
+            yield _sse("token", {"text": SAFE_EXPLANATION})
+            yield _sse("done", {"no_match": False, "degraded": True})
+            return
+
+        yield _sse("token", {"text": buffer[released:]})  # release the held-back tail
         yield _sse("done", {"no_match": False})
 
-        _history().add_message(user_id, req.session_id, "human", req.query)
-        _history().add_message(user_id, req.session_id, "ai", "".join(tokens))
+        _history().add_message(user_id, req.session_id, "human", query)
+        _history().add_message(user_id, req.session_id, "ai", buffer)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -256,15 +322,16 @@ def delete_history(session_id: str, user_id: str = Depends(require_user)) -> dic
 
 @app.delete("/account")
 def delete_account(user_id: str = Depends(require_user)) -> dict[str, int]:
-    """Right-to-be-forgotten (Decision 24): delete ALL of the caller's data."""
+    """Right-to-be-forgotten: delete all of the caller's data."""
     logger.info("account deletion requested user=%s", user_id)
     return {"deleted": _history().delete_user(user_id)}
 
 
 @app.get("/account/export")
 def export_account(user_id: str = Depends(require_user)) -> dict[str, Any]:
-    """DSAR (Decision 24): export all of the caller's stored data."""
+    """Export all of the caller's stored data (DSAR)."""
     return {"user_messages": _history().export_user(user_id)}
 
 
-configure_observability(app)  # OTel traces + FastAPI instrumentation (best-effort)
+configure_observability(app)  # logging + OTel traces + FastAPI instrumentation
+assert_auth_config_sane(get_settings())  # refuse to boot a non-local env with auth disabled

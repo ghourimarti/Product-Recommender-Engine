@@ -1,4 +1,4 @@
-"""Chaos unit tests for failure-mode degradation (Step 13). No external services."""
+"""Chaos unit tests for failure-mode degradation. No external services."""
 
 from __future__ import annotations
 
@@ -45,8 +45,13 @@ class _NoSemanticCache:
 
 
 class _BrokenStore:
+    """Qdrant is down: every call into the store raises (including the no-match gate)."""
+
     def index(self, products: list[Product]) -> None:
         return None
+
+    def max_dense_similarity(self, query_vector: list[float]) -> float:
+        raise RuntimeError("qdrant down")
 
     def search(self, query: str, k: int = 5) -> list[RetrievedProduct]:
         raise RuntimeError("qdrant down")

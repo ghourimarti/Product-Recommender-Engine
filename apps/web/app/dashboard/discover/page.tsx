@@ -6,7 +6,12 @@ import { useAuth } from "@clerk/nextjs";
 import { Search, X, SlidersHorizontal } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-import { type Recommendation, aggregate, offerToRecommendation } from "@/lib/api";
+import {
+  type AggregatorResult,
+  type Recommendation,
+  offerToRecommendation,
+  streamAggregate,
+} from "@/lib/api";
 import { Topbar }       from "@/components/dashboard/Topbar";
 import { ProductCard }  from "@/components/ProductCard";
 import { SkeletonCard } from "@/components/SkeletonCard";
@@ -78,10 +83,30 @@ function DiscoverContent() {
 
     try {
       const token = await getToken();
-      const result = await aggregate(q, token ?? undefined, 6, controller.signal);
-      setProducts(result.offers.map(offerToRecommendation));
-      setAnswer(result.summary);
-      if (result.no_match) setBanner("No good match found for that request.");
+      // Cards-first streaming: render the ranked offers the moment the search returns, then fill
+      // in the grounded reasons when the LLM finishes. Previously this awaited BOTH before
+      // painting anything (cold: 2.94s).
+      for await (const event of streamAggregate(q, token ?? undefined, 6, controller.signal)) {
+        if (event.event === "offers" || event.event === "final") {
+          const result = event.data as AggregatorResult;
+          setProducts(result.offers.map(offerToRecommendation));
+          if (result.summary) setAnswer(result.summary);
+
+          if (event.event === "offers") {
+            // First paint — cards are on screen; reasons are still being written.
+            setMeta((m) => ({ ...m, cardsMs: Date.now() - startTime.current }));
+          }
+
+          // An outage must NOT read as "no good match" — that hid a dead shopping source from
+          // both users and operators.
+          if (result.source_unavailable) {
+            setBanner(result.detail || "Live product search is temporarily unavailable.");
+            setMeta((m) => ({ ...m, degraded: true }));
+          } else if (result.no_match) {
+            setBanner("No good match found for that request.");
+          }
+        }
+      }
       setMeta((m) => ({ ...m, latencyMs: Date.now() - startTime.current }));
       setStatus("idle");
     } catch (error) {

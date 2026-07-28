@@ -81,6 +81,9 @@ services:
       - --storage.tsdb.retention.time=15d
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Alert rules were a DEAD FILE before: prometheus.yml had no `rule_files` and the file was
+      # never mounted, so no alert could ever fire. Both are fixed now.
+      - ../../ops/observability/alerts.yaml:/etc/prometheus/alerts.yaml:ro
       - prometheus_data:/prometheus
     ports:
       - "${PROMETHEUS_PORT:-2009}:9090"
@@ -94,6 +97,11 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana
+      # Grafana used to boot EMPTY — no datasource, no dashboards — so it could not query
+      # anything and was pointless to open. Provisioned as code so it survives volume wipes.
+      - ../../ops/observability/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ../../ops/observability/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ../../ops/observability/grafana/json:/etc/grafana/provisioning/dashboards/json:ro
     ports:
       - "${GRAFANA_PORT:-2010}:3000"
     depends_on:

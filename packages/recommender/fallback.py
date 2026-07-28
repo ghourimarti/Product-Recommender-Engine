@@ -1,4 +1,4 @@
-"""Popularity-only ranking — the degraded path when retrieval is unavailable (Decision 21).
+"""Popularity-only ranking: the degraded path when retrieval is unavailable.
 
 No semantic relevance: rank the whole catalog by avg_rating x review-volume confidence.
 Used when Qdrant/embeddings are down or the retrieval circuit is open, so users still get a

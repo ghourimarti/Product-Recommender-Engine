@@ -1,10 +1,9 @@
-"""L2 semantic cache (Decision 10): a dedicated Qdrant collection of query->result.
+"""Semantic cache (L2): a dedicated Qdrant collection of query->result.
 
 On lookup, the incoming query embedding is matched against cached query embeddings; if the
 nearest is within the cosine threshold (and same catalog version), the cached result is
-served — catching near-duplicate phrasings that an exact response cache misses. This is the
-'semantic caching as a system' gap-closer; it reuses Qdrant (ElastiCache OSS lacks vector
-search), so no new infra.
+served, catching near-duplicate phrasings that an exact response cache misses. It reuses
+Qdrant (ElastiCache OSS lacks vector search), so no new infra.
 """
 
 from __future__ import annotations

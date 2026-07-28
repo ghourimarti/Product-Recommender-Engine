@@ -1,4 +1,4 @@
-"""Cross-encoder reranker (Decision 3) — re-scores retrieved candidates by query relevance.
+"""Cross-encoder reranker: re-scores retrieved candidates by query relevance.
 
 Runs locally via fastembed (no API key). A cross-encoder reads the (query, product_text)
 pair jointly, which discriminates better than the bi-encoder/RRF retrieval score —

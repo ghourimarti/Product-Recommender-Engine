@@ -1,4 +1,4 @@
-"""Unit tests for the reranker scoring/sort logic (Step 5b). Pure, no model download."""
+"""Unit tests for the reranker scoring/sort logic. Pure, no model download."""
 
 from __future__ import annotations
 

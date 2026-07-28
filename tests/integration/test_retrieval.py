@@ -1,4 +1,4 @@
-"""Integration test: real Qdrant + real OpenAI embeddings (Step 3).
+"""Integration test: real Qdrant + real OpenAI embeddings.
 
 Skips unless OPENAI_API_KEY is set and Qdrant is reachable at QDRANT_URL.
 """

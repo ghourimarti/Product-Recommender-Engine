@@ -15,7 +15,7 @@ DEFAULT_CATALOG = Path("data/products.json")
 
 
 def load_catalog(path: Path = DEFAULT_CATALOG) -> list[Product]:
-    """Load the product catalog produced by Step 2's aggregation."""
+    """Load the product catalog produced by the aggregation step."""
     raw = json.loads(path.read_text(encoding="utf-8"))
     return [Product.model_validate(item) for item in raw]
 

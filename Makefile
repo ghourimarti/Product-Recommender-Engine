@@ -67,13 +67,19 @@ check: lint type test   ## Lint + type-check + test (the green gate)
 
 # ─── Eval ─────────────────────────────────────────────────────────────────────
 
-eval-ranking:   ## Retrieval + ranking eval (NDCG@3, MRR, Recall@3)
+eval-ranking:   ## Retrieval + ranking eval, STATIC catalog path (NDCG@3, MRR, Recall@3)
 	uv run python -m evaluation.ranking.run
+
+eval-aggregator: ## Ranking eval for the SHIPPED /aggregate path — offline, 0 SerpApi cost
+	uv run python -m evaluation.aggregator.run
 
 eval-rag:       ## Answer-quality eval (custom LLM judge)
 	uv run python -m evaluation.ragas.run
 
-eval-gate:      ## CI eval gate — blocks merge on ranking regression vs baseline
+# Two gates. The aggregator gate needs no services/keys (recorded fixtures), so it runs on every
+# PR; it also fails if our ranking stops beating Google Shopping's own order.
+eval-gate:      ## CI eval gates — block merge on ranking regression (static + aggregator paths)
+	uv run python -m evaluation.aggregator.gate
 	uv run python -m evaluation.ranking.gate
 
 

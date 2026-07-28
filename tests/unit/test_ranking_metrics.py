@@ -1,4 +1,4 @@
-"""Unit tests for ranking metrics (Step 5). Pure, no services."""
+"""Unit tests for ranking metrics. Pure, no services."""
 
 from __future__ import annotations
 

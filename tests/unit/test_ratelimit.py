@@ -1,4 +1,4 @@
-"""Unit tests for the per-user rate limiter (Step 10) using fakeredis."""
+"""Unit tests for the per-user rate limiter using fakeredis."""
 
 from __future__ import annotations
 

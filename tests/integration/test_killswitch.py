@@ -1,4 +1,4 @@
-"""Integration test for the LLM kill-switch (Step 12).
+"""Integration test for the LLM kill-switch.
 
 With LLM_ENABLED=false, /chat must still serve recommendation cards but emit NO LLM tokens.
 Needs Qdrant + Redis + OPENAI_API_KEY (retrieval/cache still run; only the LLM is disabled).
@@ -6,36 +6,23 @@ Needs Qdrant + Redis + OPENAI_API_KEY (retrieval/cache still run; only the LLM i
 
 from __future__ import annotations
 
-import socket
-
 import pytest
 from fastapi.testclient import TestClient
+from tests.conftest import qdrant_reachable, redis_reachable
 
 from core.auth import mint_dev_token
 from core.config import get_settings
 
 
-def _reachable(port: int) -> bool:
-    sock = socket.socket()
-    sock.settimeout(1.0)
-    try:
-        sock.connect(("localhost", port))
-        return True
-    except OSError:
-        return False
-    finally:
-        sock.close()
-
-
 @pytest.mark.integration
 def test_chat_kill_switch(monkeypatch: pytest.MonkeyPatch) -> None:
-    if not (_reachable(6333) and _reachable(6379)):
+    if not (qdrant_reachable() and redis_reachable()):
         pytest.skip("needs Qdrant + Redis")
     if not get_settings().openai_api_key:
         pytest.skip("needs OPENAI_API_KEY (embeddings)")
-    if get_settings().clerk_jwks_url:
-        pytest.skip("Clerk configured; dev token n/a")
-
+    # Force dev-token auth so this runs even when .env points at real Clerk (it used to skip,
+    # leaving the kill-switch with zero executing coverage).
+    monkeypatch.setenv("CLERK_JWKS_URL", "")
     monkeypatch.setenv("LLM_ENABLED", "false")
     get_settings.cache_clear()
     try:

@@ -37,11 +37,11 @@ class Product(BaseModel):
     rating_histogram: dict[int, int]
     representative_reviews: list[str]
     summary_phrases: list[str]
-    combined_text: str  # title + representative reviews; the text embedded in Step 3
+    combined_text: str  # title + representative reviews; the text that gets embedded
 
 
 class Citation(BaseModel):
-    """Grounds a recommendation back to a concrete review (used from Step 6)."""
+    """Grounds a recommendation back to a concrete review."""
 
     product_id: str
     title: str
@@ -76,7 +76,7 @@ class RankedProduct(BaseModel):
 
 
 class RankingResult(BaseModel):
-    """Ranked recommendations plus the 'no good match' signal (Decision 21 / F6)."""
+    """Ranked recommendations plus the 'no good match' signal."""
 
     products: list[RankedProduct]
     no_match: bool
@@ -147,12 +147,20 @@ class RankedOffer(BaseModel):
 
 
 class AggregatorResult(BaseModel):
-    """The end-to-end aggregator result: ranked live offers (with buy links) + no-match flag."""
+    """The end-to-end aggregator result: ranked live offers (with buy links) + status flags.
+
+    ``no_match`` and ``source_unavailable`` are DISTINCT on purpose. Previously a dead SerpApi
+    (quota exhausted, bad key, network down) was reported as ``no_match=True`` — i.e. an outage
+    was indistinguishable from "we searched and found nothing", so nobody could tell the product
+    was broken. They must never be conflated again.
+    """
 
     query: str
     summary: str = ""  # one-line overall summary (for the AI panel)
     offers: list[RankedOffer]
-    no_match: bool
+    no_match: bool  # we searched successfully and nothing was relevant
+    source_unavailable: bool = False  # the shopping source failed / budget exhausted (degraded)
+    detail: str = ""  # user-facing explanation for a degraded state
 
 
 class RecommendRequest(BaseModel):
@@ -165,7 +173,7 @@ class RecommendRequest(BaseModel):
 class ChatRequest(BaseModel):
     """POST /chat body — SSE streamed grounded recommendations with per-user history.
 
-    user_id is NOT taken from the body; it is the authenticated JWT subject (Decision 9).
+    user_id is NOT taken from the body; it is the authenticated JWT subject.
     """
 
     query: str

@@ -8,6 +8,12 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Alert rules. These existed as a file (ops/observability/alerts.yaml) but were NEVER loaded —
+# Prometheus had no rule_files section, so no alert could ever fire. Mounted read-only by the
+# compose file.
+rule_files:
+  - /etc/prometheus/alerts.yaml
+
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:

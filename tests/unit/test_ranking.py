@@ -1,4 +1,4 @@
-"""Unit tests for the rating-aware ranking blend (Step 4). Pure, no services."""
+"""Unit tests for the rating-aware ranking blend. Pure, no services."""
 
 from __future__ import annotations
 

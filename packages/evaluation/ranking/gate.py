@@ -1,4 +1,4 @@
-"""CI eval gate (Decision 19): fail the build if ranking quality regresses vs the baseline.
+"""CI eval gate: fail the build if ranking quality regresses vs the baseline.
 
     uv run python -m evaluation.ranking.gate     # needs Qdrant up + OPENAI_API_KEY
 

@@ -13,7 +13,9 @@ const SECTIONS = [
     title: "Semantic Search",
     lead: "Understands what you mean, not just what you type.",
     body: "Traditional search matches keywords. ProductIQ embeds your query and the entire catalog into the same vector space, so 'earphones that survive a sweaty gym session' finds sweat-resistant, secure-fit products even if none of those exact words appear in the listing.",
-    points: ["Dense vector retrieval over 10,000+ products", "Hybrid dense + sparse (BM25) matching", "Understands synonyms, intent, and context"],
+    // "over 10,000+ products" was fabricated: the seed catalog is 9 products, plus live
+    // Google-Shopping offers fetched per query.
+    points: ["Dense vector retrieval + live shopping offers", "Hybrid dense + sparse (BM25) matching", "Understands synonyms, intent, and context"],
   },
   {
     id: "rating",

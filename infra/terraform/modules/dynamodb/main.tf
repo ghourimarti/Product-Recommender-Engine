@@ -7,7 +7,7 @@ variable "tags" {
   default = {}
 }
 
-# Single-table design (Decision 1): PK + SK, on-demand, PITR + TTL.
+# Single-table design: PK + SK, on-demand, PITR + TTL.
 resource "aws_dynamodb_table" "this" {
   name         = var.table_name
   billing_mode = "PAY_PER_REQUEST"

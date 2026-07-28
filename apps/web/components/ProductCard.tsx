@@ -171,7 +171,9 @@ export function ProductCard({
             rel="noopener noreferrer"
             className="btn-primary px-3 py-1.5 text-xs shrink-0"
           >
-            Buy{product.store ? ` on ${product.store}` : ""} →
+            {/* The link resolves to a Google Shopping product page, NOT the merchant's own site,
+                so "Buy on {store}" was misleading (finding m-1). Say where it actually goes. */}
+            View on Google Shopping →
           </a>
         ) : (
           <span className="text-xs text-accent cursor-default select-none">See analysis →</span>

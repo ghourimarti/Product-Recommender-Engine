@@ -1,12 +1,13 @@
-"""LLM chain pieces (Decision 4 + 6): provider fallback chain, query rewrite, grounded explain.
+"""LLM chain pieces: provider fallback chain, query rewrite, grounded explain.
 
 All LangChain/provider calls are confined here behind typed functions. The provider chain is
-assembled from whichever API keys are configured, in priority order Groq -> OpenAI -> Anthropic
-(Decision 4), so the app runs on any single key and auto-prioritizes when more are added.
+assembled from whichever API keys are configured, in priority order Groq -> OpenAI -> Anthropic,
+so the app runs on any single key and auto-prioritizes when more are added.
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -28,6 +29,8 @@ from core.prompts import (
     EXPLAIN_SYSTEM,
     REWRITE_SYSTEM,
 )
+
+logger = logging.getLogger("p2.llm")
 
 MAX_REVIEW_CHARS = 800  # cap evidence text per product to bound prompt cost
 
@@ -60,16 +63,24 @@ def _make_model(provider: str, settings: Settings) -> Any:
     }
     if provider not in factories:
         raise ValueError(f"unknown provider: {provider}")
-    return factories[provider](
-        model=model_names[provider],
-        api_key=SecretStr(api_keys[provider]),
-        temperature=0.3,
-        max_tokens=settings.max_output_tokens,  # per-request cost cap (Decision 20)
-    )
+    kwargs: dict[str, Any] = {
+        "model": model_names[provider],
+        "api_key": SecretStr(api_keys[provider]),
+        "temperature": 0.3,
+        "max_tokens": settings.max_output_tokens,  # per-request cost cap
+    }
+    # `stream_usage=True` is OpenAI-specific: it opts into `stream_options={"include_usage": True}`
+    # so streamed calls emit token counts (without it Langfuse recorded tokens=None / cost=0).
+    # langchain-groq accepts it as a Pydantic field but then forwards it into groq's
+    # Completions.create(), which rejects it → TypeError on every call, silently masked by the
+    # fallback chain. Groq and Anthropic surface usage in response_metadata without an opt-in.
+    if provider == "openai":
+        kwargs["stream_usage"] = True
+    return factories[provider](**kwargs)
 
 
 def build_chat_model(settings: Settings | None = None) -> Any:
-    """Primary chat model with the remaining providers attached as fallbacks (Decision 4)."""
+    """Primary chat model with the remaining providers attached as fallbacks."""
     settings = settings or get_settings()
     providers = available_providers(settings)
     if not providers:

@@ -1,6 +1,6 @@
 name: CD
 
-# Skeleton deploy (Decision 16): OIDC -> AWS -> build/push to ECR -> Helm deploy to EKS.
+# Skeleton deploy: OIDC -> AWS -> build/push to ECR -> Helm deploy to EKS.
 # Requires configured GitHub secrets + an AWS OIDC role; does nothing without them.
 on:
   push:

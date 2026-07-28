@@ -1,1 +1,1 @@
-"""API app (FastAPI) — /health, /metrics, /recommend, /chat (SSE). Implemented in Step 8."""
+"""API app (FastAPI): /health, /metrics, /recommend, /chat (SSE)."""

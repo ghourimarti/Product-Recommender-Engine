@@ -1,9 +1,9 @@
-"""Ranking-eval runner (Step 5/5b): score retrieve -> [rerank] -> rank on the golden set.
+"""Ranking-eval runner: score retrieve -> [rerank] -> rank on the golden set.
 
     uv run python -m evaluation.ranking.run     # needs Qdrant up + OPENAI_API_KEY
 
 Runs the pipeline both WITHOUT and WITH the cross-encoder reranker and writes an A/B
-comparison to docs/eval-baseline.md. Prints both aggregates. This is the go/no-go gate.
+comparison to docs/eval-baseline.md. Prints both aggregates.
 """
 
 from __future__ import annotations
@@ -157,8 +157,7 @@ def build_report(base_rows: list[EvalRow], rerank_rows: list[EvalRow]) -> str:
         f"({base['mrr']} -> {rer['mrr']}) but **regressed NDCG@3** "
         f"({base['ndcg@3']} -> {rer['ndcg@3']}) and **Recall@3** "
         f"({base['recall@3']} -> {rer['recall@3']}), and did **not** lift the "
-        "semantic/bass tier. Kept behind a flag (`rerank_enabled`, default False) per "
-        "Decision 3 — measure, don't assume.",
+        "semantic/bass tier. Kept behind a flag (`rerank_enabled`, default False).",
         "",
         "## CI regression gate (production default = hybrid-only)",
         "",

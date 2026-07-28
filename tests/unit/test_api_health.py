@@ -1,4 +1,4 @@
-"""Unit tests for the API health/metrics endpoints (Step 8). No external services."""
+"""Unit tests for the API health/metrics endpoints. No external services."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def test_recommend_requires_auth(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_cors_allows_frontend_origin() -> None:
-    # Browser at the Next.js origin must be allowed cross-origin (Decision 18).
+    # Browser at the Next.js origin must be allowed cross-origin.
     # Origin is env-driven (see CORS_ORIGINS in .env / .env.example — first entry
     # is the web frontend, default http://localhost:2012).
     origin = get_settings().cors_origins.split(",")[0].strip()

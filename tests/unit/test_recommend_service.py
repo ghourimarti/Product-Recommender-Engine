@@ -15,6 +15,9 @@ class FakeStore:
     def index(self, products: list[Product]) -> None:
         return None
 
+    def max_dense_similarity(self, query_vector: list[float]) -> float:
+        return 0.9  # on-topic; the no-match gate is exercised in test_cache.py
+
     def search(self, query: str, k: int = 5) -> list[RetrievedProduct]:
         return self._results[:k]
 

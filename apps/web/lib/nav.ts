@@ -63,7 +63,8 @@ export const FLAT_LINKS: NavLeaf[] = [
 ];
 
 /* ── Metric badges (used in navbar CTA + homepage) ────────────────────────── */
+/* Measured only. "98.9% uptime" was fabricated — there is no uptime monitor. */
 export const HEADLINE_METRICS = [
-  { icon: Zap,       value: "<800ms", label: "median response" },
-  { icon: BarChart3, value: "98.9%",  label: "uptime" },
+  { icon: Zap,       value: "7.6ms", label: "p95 cached" },
+  { icon: BarChart3, value: "66%",   label: "cache hit rate" },
 ];

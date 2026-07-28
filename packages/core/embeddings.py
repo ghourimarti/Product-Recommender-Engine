@@ -1,4 +1,4 @@
-"""Embedding factories (Decision 5: OpenAI text-embedding-3-small @1536 dense + BM25 sparse)."""
+"""Embedding factories: OpenAI text-embedding-3-small @1536 dense + BM25 sparse."""
 
 from __future__ import annotations
 

@@ -1,8 +1,8 @@
-"""Answer-quality runner (Step 7): faithfulness / answer-relevancy / context-precision.
+"""Answer-quality runner: faithfulness / answer-relevancy / context-precision.
 
     uv run python -m evaluation.ragas.run      # needs Qdrant up + OPENAI_API_KEY (judge)
 
-Decision 19 named RAGAS, but every ragas release hard-imports
+RAGAS was the natural choice, but every ragas release hard-imports
 ``langchain_community.chat_models.vertexai`` (removed for langchain-core>=0.3, which our
 LLM stack requires) -> unresolvable dependency conflict. This is an equivalent custom
 LLM-judge harness using the same metric definitions: answers come from the real pipeline
@@ -94,7 +94,7 @@ def _means(rows: list[tuple[str, JudgeScores]]) -> dict[str, float]:
 def build_report(rows: list[tuple[str, JudgeScores]]) -> str:
     means = _means(rows)
     lines: list[str] = [
-        "# Answer-Quality Baseline (Step 7)",
+        "# Answer-Quality Baseline",
         "",
         "> Custom LLM-judge harness (RAGAS-style metrics). Answers from the real pipeline "
         "(Groq primary); judged by OpenAI gpt-4o. Contexts = product evidence texts.",
@@ -124,7 +124,7 @@ def build_report(rows: list[tuple[str, JudgeScores]]) -> str:
         "- **Not the RAGAS library** — every ragas release hard-imports a removed "
         "`langchain_community.chat_models.vertexai`, incompatible with our langchain-core>=0.3 "
         "stack. This custom harness implements the same metric definitions via an LLM judge.",
-        "- **Judge = OpenAI gpt-4o** (Anthropic key unavailable; Decision 19 wanted an "
+        "- **Judge = OpenAI gpt-4o** (Anthropic key unavailable; ideally an "
         "off-family judge). OpenAI is a *fallback* answer provider, but the **primary** answer "
         "model is Groq, so the judge is off the primary.",
         "- 8 queries on a 9-product catalog: a sanity check, not a benchmark.",

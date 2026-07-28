@@ -11,11 +11,14 @@ const VALUES = [
   { icon: Globe,   title: "Built to scale", desc: "The same architecture serving a demo scales to millions of queries — statelessly." },
 ];
 
+/* Only measured, reproducible numbers. The previous set
+   ("10,000+ products", "500k+ reviews", "12,000+ active shoppers", "98.9% uptime") was invented:
+   there are zero real users and uptime has never been measured. */
 const STATS = [
-  { value: "10,000+", label: "Products indexed" },
-  { value: "500k+",   label: "Reviews analyzed" },
-  { value: "12,000+", label: "Active shoppers" },
-  { value: "98.9%",   label: "Uptime" },
+  { value: "7.6ms",  label: "p95 cached response" },
+  { value: "66%",    label: "Cache hit rate" },
+  { value: "3",      label: "LLM providers, auto-failover" },
+  { value: "107",    label: "Automated tests in CI" },
 ];
 
 export default function AboutPage() {

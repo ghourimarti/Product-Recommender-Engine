@@ -1,5 +1,6 @@
 import { Check, Minus } from "lucide-react";
 import { MarketingShell, PageHeader } from "@/components/MarketingShell";
+import { DemoNotice } from "@/components/marketing/DemoNotice";
 import { PricingPlans } from "@/components/PricingPlans";
 
 export const metadata = { title: "Pricing — ProductIQ" };
@@ -37,6 +38,9 @@ function Cell({ value }: { value: string | boolean }) {
 export default function PricingPage() {
   return (
     <MarketingShell>
+      {/* Pricing tiers (and the SLA line in the comparison table) are illustrative — nothing is
+          actually for sale and no SLA is offered. Say so plainly. */}
+      <DemoNotice />
       <PageHeader
         eyebrow="Pricing"
         title="Plans that scale with you"

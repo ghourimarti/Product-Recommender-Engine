@@ -1,5 +1,5 @@
 # Secrets (DB creds, API keys) are synced into this k8s Secret by the External Secrets
-# Operator from AWS Secrets Manager (Decision 17). The chart references it via envFrom.
+# Operator from AWS Secrets Manager. The chart references it via envFrom.
 secretName: p2-secrets
 
 api:
