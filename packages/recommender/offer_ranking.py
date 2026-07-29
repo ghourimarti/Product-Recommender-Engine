@@ -13,7 +13,11 @@ from __future__ import annotations
 from core.models import Offer, RankedOffer
 from recommender.ranking import RankingConfig
 
-_NEUTRAL_RATING = 0.5  # used when an offer has no rating, so it isn't unfairly buried
+# Neutral midpoint for a MISSING signal. Applied to both relevance (offer has no position) and
+# rating (offer has no stars), so incomplete data leaves an offer neither promoted nor buried.
+# Named for the role it plays rather than for one of its two callers -- it was `_NEUTRAL_RATING`,
+# which read as a rating constant even where it stands in for relevance.
+_NEUTRAL_SCORE = 0.5
 
 
 def _clamp01(value: float) -> float:
@@ -31,8 +35,8 @@ def rank_offers(offers: list[Offer], config: RankingConfig | None = None) -> lis
         if offer.position:
             relevance = _clamp01(1.0 - (offer.position - 1) / max_position)
         else:
-            relevance = _NEUTRAL_RATING
-        rating_norm = _clamp01((offer.rating - 1.0) / 4.0) if offer.rating else _NEUTRAL_RATING
+            relevance = _NEUTRAL_SCORE
+        rating_norm = _clamp01((offer.rating - 1.0) / 4.0) if offer.rating else _NEUTRAL_SCORE
         volume = min(offer.review_count / cfg.volume_saturation, 1.0)
         final = cfg.relevance_weight * relevance + cfg.rating_weight * rating_norm * volume
         ranked.append(

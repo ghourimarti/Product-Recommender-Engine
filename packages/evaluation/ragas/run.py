@@ -6,7 +6,7 @@ RAGAS was the natural choice, but every ragas release hard-imports
 ``langchain_community.chat_models.vertexai`` (removed for langchain-core>=0.3, which our
 LLM stack requires) -> unresolvable dependency conflict. This is an equivalent custom
 LLM-judge harness using the same metric definitions: answers come from the real pipeline
-(Groq primary), judged by OpenAI gpt-4o. Writes docs/answer-quality-baseline.md.
+(Groq primary), judged by OpenAI gpt-4o. Writes reports/answer-quality-eval.md.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from retrieval.index import load_catalog
 from retrieval.store import QdrantHybridStore
 
 GOLDEN_PATH = Path(__file__).parent / "golden_set.json"
-REPORT_OUT = Path("docs/answer-quality-baseline.md")
+REPORT_OUT = Path("reports/answer-quality-eval.md")  # reports/ is tracked; docs/ is gitignored
 K = 3
 METRIC_NAMES = ("faithfulness", "answer_relevancy", "context_precision")
 
