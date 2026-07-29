@@ -64,6 +64,26 @@ _SYSTEM_PROMPT_FRAGMENTS = (
 )
 _LEAK_RE = re.compile("|".join(re.escape(f) for f in _SYSTEM_PROMPT_FRAGMENTS), re.IGNORECASE)
 
+# Minimum characters a streaming caller must withhold for the output guardrail to be sound.
+#
+# Derivation, so this is a bound rather than a guess. The streaming path appends each token to a
+# buffer, re-scans the whole buffer, and releases everything up to `len(buffer) - holdback`. A
+# fragment beginning at index `p` is only detected once the buffer reaches `p + L` (L = fragment
+# length) -- until the final character arrives there is nothing for the regex to match. The last
+# release that can happen *before* detection is therefore at `len(buffer) == p + L - 1`, which
+# releases up to `p + L - 1 - holdback`. For the fragment's first character to stay unreleased:
+#
+#     p + L - 1 - holdback <= p     <=>     holdback >= L - 1
+#
+# So withholding at least (longest fragment - 1) guarantees no part of a leak can reach the client
+# before the leak is detected. This is independent of token size, because the bound is taken over
+# the largest buffer length that can precede detection.
+#
+# Callers should hold back comfortably more than this floor, so that adding a new fragment later
+# does not silently invalidate the guarantee. `test_security.py` asserts the invariant holds.
+MAX_LEAK_FRAGMENT = max(len(f) for f in _SYSTEM_PROMPT_FRAGMENTS)
+MIN_GUARD_HOLDBACK = MAX_LEAK_FRAGMENT - 1
+
 SAFE_EXPLANATION = (
     "Here are your top matches, ranked by how well they fit your request and how well they're "
     "rated. (A detailed explanation wasn't available for this request.)"

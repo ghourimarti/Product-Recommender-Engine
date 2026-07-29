@@ -5,6 +5,8 @@ from __future__ import annotations
 from core.config import Settings
 from core.models import Explanation, ExplanationSet, RankedProduct
 from core.security import (
+    _SYSTEM_PROMPT_FRAGMENTS,
+    MIN_GUARD_HOLDBACK,
     SAFE_EXPLANATION,
     clean_user_text,
     contains_injection_markers,
@@ -15,7 +17,73 @@ from core.security import (
 )
 from recommender.chat import _merge
 
-from api.main import dev_bypass_allowed  # isort: skip
+from api.main import GUARD_HOLDBACK, dev_bypass_allowed  # isort: skip
+
+
+def test_guard_holdback_clears_the_soundness_floor() -> None:
+    """The streaming guardrail is only sound if it withholds >= (longest fragment - 1) chars.
+
+    A fragment starting at index p is undetectable until the buffer reaches p + len(fragment), so
+    the last release before detection happens at p + len(fragment) - 1. Withholding less than
+    len(fragment) - 1 would let the START of a system-prompt leak reach the client before the leak
+    was detected -- and streamed bytes cannot be recalled.
+
+    This guards against the silent failure mode: someone adds a longer fragment to
+    _SYSTEM_PROMPT_FRAGMENTS and the holdback quietly stops being sufficient.
+    """
+    assert GUARD_HOLDBACK >= MIN_GUARD_HOLDBACK
+
+
+def _replay_stream(fragment: str, holdback: int) -> tuple[bool, int, int]:
+    """Replay the streaming release loop char-by-char.
+
+    Returns (blocked, released_upto, fragment_start).
+    """
+    prefix = "x" * 500
+    full = prefix + fragment + ("y" * 500)
+
+    buffer, released, blocked = "", 0, False
+    for char in full:
+        buffer += char
+        if output_violates_policy(buffer):
+            blocked = True
+            break
+        released = max(released, max(0, len(buffer) - holdback))
+    return blocked, released, len(prefix)
+
+
+def test_streaming_release_never_leaks_any_fragment_character() -> None:
+    """Not one character of a system-prompt fragment may reach the client.
+
+    The assertion deliberately is NOT "the released text matches the leak regex". A *partial*
+    fragment never matches -- the regex only fires on the complete string -- so that check passes
+    even for a hopelessly small holdback while 26 characters of the system prompt stream to the
+    user. Verified: with holdback=5 the regex-based check reports 'safe' on every fragment.
+
+    The real invariant is positional: the release boundary must never advance past the index where
+    the fragment begins.
+    """
+    for fragment in _SYSTEM_PROMPT_FRAGMENTS:
+        blocked, released, start = _replay_stream(fragment, GUARD_HOLDBACK)
+        assert blocked, f"guard failed to detect {fragment!r}"
+        assert released <= start, (
+            f"leaked {released - start} chars of {fragment!r} before detection"
+        )
+
+
+def test_holdback_below_the_derived_floor_does_leak() -> None:
+    """Proves the floor is real: one char under it, fragment characters reach the client.
+
+    Without this, the test above could pass for a reason unrelated to GUARD_HOLDBACK being
+    correct, and MIN_GUARD_HOLDBACK would be an unverified assertion in a comment.
+    """
+    longest = max(_SYSTEM_PROMPT_FRAGMENTS, key=len)
+
+    _, released_at_floor, start = _replay_stream(longest, MIN_GUARD_HOLDBACK)
+    assert released_at_floor <= start, "the derived floor must itself be sufficient"
+
+    _, released_below, start = _replay_stream(longest, MIN_GUARD_HOLDBACK - 1)
+    assert released_below == start + 1, "one char under the floor must leak exactly one char"
 
 
 def _ranked(product_id: str) -> RankedProduct:
