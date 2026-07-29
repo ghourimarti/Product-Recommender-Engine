@@ -64,29 +64,53 @@ def _budget_keys(now: datetime | None = None) -> tuple[str, str]:
     )
 
 
-def budget_exceeded(cache: RedisCache) -> str:
-    """Return a reason string if the global SerpApi budget is spent, else ''."""
+_DAY_TTL_SECONDS = 2 * 24 * 3600
+_MONTH_TTL_SECONDS = 40 * 24 * 3600
+
+
+def release_search_budget(cache: RedisCache) -> None:
+    """Hand back a claim that was never spent (the search failed before going out)."""
+    day_key, month_key = _budget_keys()
+    cache.decr(day_key)
+    cache.decr(month_key)
+
+
+def reserve_search_budget(cache: RedisCache) -> str:
+    """Atomically claim one search against the global day+month budget.
+
+    Returns ``""`` if the claim succeeded — the caller must then either spend it or call
+    ``release_search_budget``. Otherwise returns a reason string, having claimed nothing.
+
+    **Why claim first instead of checking first.** This used to read the counters, decide, and
+    only increment *after* the search returned. Between the read and the increment the budget was
+    unguarded, so N concurrent cache misses all saw the same under-budget count, all passed, and
+    all spent — overshooting the cap by N-1 on a resource that is metered and paid. Redis INCR is
+    atomic, so incrementing first and inspecting the returned value means exactly one caller can
+    ever see the value that crosses the cap.
+
+    Fail-open on a Redis outage is deliberate and unchanged: ``incr`` returns 0, which reads as
+    under budget, so a Redis outage degrades to "unmetered" rather than "product down". That is a
+    real trade-off — it means spend is uncapped precisely when we cannot count it — and it is the
+    same choice the rate limiter makes. A guard that cannot be released is also not released here:
+    a zero from ``incr`` means nothing was claimed, so there is nothing to hand back.
+    """
     settings = get_settings()
     day_key, month_key = _budget_keys()
-    if settings.serpapi_daily_budget:
-        spent_today = int(cache.get(day_key) or 0)
-        if spent_today >= settings.serpapi_daily_budget:
-            return f"daily search budget reached ({spent_today}/{settings.serpapi_daily_budget})"
-    if settings.serpapi_monthly_budget:
-        spent_month = int(cache.get(month_key) or 0)
-        if spent_month >= settings.serpapi_monthly_budget:
-            return (
-                f"monthly search budget reached ({spent_month}/{settings.serpapi_monthly_budget})"
-            )
+
+    day_spent = cache.incr(day_key, ttl_seconds=_DAY_TTL_SECONDS)
+    month_spent = cache.incr(month_key, ttl_seconds=_MONTH_TTL_SECONDS)
+
+    daily_cap = settings.serpapi_daily_budget
+    if daily_cap and day_spent > daily_cap:
+        release_search_budget(cache)
+        return f"daily search budget reached ({day_spent - 1}/{daily_cap})"
+
+    monthly_cap = settings.serpapi_monthly_budget
+    if monthly_cap and month_spent > monthly_cap:
+        release_search_budget(cache)
+        return f"monthly search budget reached ({month_spent - 1}/{monthly_cap})"
+
     return ""
-
-
-def record_search_spend(cache: RedisCache) -> None:
-    """Count one live search against the global day/month budget."""
-    day_key, month_key = _budget_keys()
-    cache.incr(day_key, ttl_seconds=2 * 24 * 3600)
-    cache.incr(month_key, ttl_seconds=40 * 24 * 3600)
-    SEARCH_SPEND.inc()
 
 
 def _degraded(query: str, reason: str, detail: str) -> AggregatorResult:
@@ -159,8 +183,9 @@ def aggregate_stream(
         return
     CACHE_MISSES.labels("aggregate").inc()
 
-    # Global budget guard — a cache miss is about to spend real money.
-    reason = budget_exceeded(cache)
+    # Global budget guard — a cache miss is about to spend real money, so the claim is made
+    # atomically BEFORE the search. Concurrent misses can no longer all pass the same check.
+    reason = reserve_search_budget(cache)
     if reason:
         logger.error("SerpApi budget exhausted: %s", reason)
         yield (
@@ -176,8 +201,10 @@ def aggregate_stream(
 
     try:
         offers = search(query, num)
-        record_search_spend(cache)
     except Exception:
+        # The search never went out, so hand the claim back rather than charging the budget
+        # for a request the provider never served.
+        release_search_budget(cache)
         # A dead source is an OUTAGE, not an empty result. Never report it as no_match.
         logger.error("shopping source failed; serving degraded response", exc_info=True)
         yield (
@@ -189,6 +216,8 @@ def aggregate_stream(
             ),
         )
         return
+
+    SEARCH_SPEND.inc()  # a live search actually went out and was served
 
     ranked = rank_offers(offers, config)[:k]
     if not ranked:

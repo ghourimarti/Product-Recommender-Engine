@@ -148,6 +148,23 @@ class RedisCache:
         self._on_success()
         return value
 
+    def decr(self, key: str) -> int:
+        """Decrement a counter. Used to hand back a budget claim that was never spent.
+
+        Returns 0 on Redis failure, same fail-open contract as ``incr``. A lost decrement
+        over-counts spend (we refuse a search we could have afforded), which is the safe
+        direction to be wrong about a metered resource.
+        """
+        if self._circuit_open():
+            return 0
+        try:
+            value = int(self._client.decr(key))
+        except Exception:
+            self._on_failure()
+            return 0
+        self._on_success()
+        return value
+
     def incr_window(self, key: str, ttl_seconds: int) -> int:
         """Fixed-window counter; on Redis failure returns 0 (rate limiting fails open)."""
         if self._circuit_open():
