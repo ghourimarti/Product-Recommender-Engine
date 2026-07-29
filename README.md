@@ -281,8 +281,10 @@ make seed                        # aggregate reviews → products, then embed + 
 make eval-aggregator             # ranking eval for the SHIPPED /aggregate path (offline, 0 API cost)
 make eval-ranking                # NDCG@3 / MRR / Recall@3 (+ reranker A/B), static-catalog path
 make eval-rag                    # answer-quality (custom LLM judge)
-# All three print to stdout. Frozen baselines the CI gate compares against are tracked at
+# Each writes a markdown report to reports/ (tracked, so the evidence is publishable) and prints
+# aggregates to stdout. Frozen baselines the CI gate compares against are tracked at
 # packages/evaluation/{aggregator,ranking}/baseline.json
+# reports/aggregator-eval.md is committed and regenerates offline with zero API cost.
 ```
 
 ### 4 · Run the full stack — **Docker (recommended)**

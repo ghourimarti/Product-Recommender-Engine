@@ -3,7 +3,7 @@
     uv run python -m evaluation.ranking.run     # needs Qdrant up + OPENAI_API_KEY
 
 Runs the pipeline both WITHOUT and WITH the cross-encoder reranker and writes an A/B
-comparison to docs/eval-baseline.md. Prints both aggregates.
+comparison to reports/ranking-eval.md. Prints both aggregates.
 """
 
 from __future__ import annotations
@@ -23,7 +23,9 @@ from retrieval.rerank import CrossEncoderReranker, Reranker
 from retrieval.store import QdrantHybridStore
 
 GOLDEN_PATH = Path(__file__).parent / "golden_set.json"
-REPORT_OUT = Path("docs/eval-baseline.md")
+# reports/ is tracked; docs/ is gitignored. Writing eval output to docs/ meant every report this
+# runner produced was unpublishable -- the evidence existed locally and could never be shown.
+REPORT_OUT = Path("reports/ranking-eval.md")
 RETRIEVE_K = 9  # rank the whole catalog so NDCG/MRR see the full ordering
 METRICS = ("recall@3", "recall@5", "ndcg@3", "ndcg@5", "mrr")
 
