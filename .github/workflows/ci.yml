@@ -75,8 +75,24 @@ jobs:
       - name: Export runtime dependencies
         run: uv export --no-dev --no-emit-project --format requirements-txt -o requirements-audit.txt
 
+      # Known, accepted, and enumerated -- not suppressed wholesale. Every ID below is a
+      # langchain-family advisory whose only fix is in 1.x, and pyproject pins
+      # `langchain>=0.3,<0.4` because langfuse 2.x hard-imports langchain.callbacks.base
+      # (drop the pin and tracing silently no-ops). Clearing these is a langchain 0.3 -> 1.x
+      # AND langfuse 2 -> 3 migration, tracked in the README roadmap.
+      #
+      # Listing IDs individually is deliberate: a NEW langchain CVE still fails this build,
+      # whereas `--ignore-package langchain` would hide it forever. Delete entries here as the
+      # migration lands; the build tells you when the list is stale.
       - name: Audit Python dependencies
-        run: uvx pip-audit -r requirements-audit.txt --progress-spinner off
+        run: |
+          uvx pip-audit -r requirements-audit.txt --progress-spinner off \
+            --ignore-vuln PYSEC-2026-2192 \
+            --ignore-vuln PYSEC-2026-2193 \
+            --ignore-vuln PYSEC-2026-2562 \
+            --ignore-vuln PYSEC-2026-77 \
+            --ignore-vuln PYSEC-2026-2556 \
+            --ignore-vuln PYSEC-2026-76
 
       - uses: actions/setup-node@v4
         with:

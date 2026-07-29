@@ -672,6 +672,10 @@ Every step above is reproducible with the `make` targets and commands shown.
   needs no services or keys, so it belongs as a required check on every PR
 - ☁️ **Actually apply the Terraform** — the HCL validates but has never been applied; a real EKS
   deploy (and its bill) is the honest next milestone
+- 🔐 **LangChain 0.3 → 1.x + Langfuse 2 → 3** — six open CVEs in the langchain family are fixed
+  only in 1.x, but `langchain` is pinned `<0.4` because Langfuse 2.x hard-imports
+  `langchain.callbacks.base`; bumping it blind trades a known CVE for silently-dead tracing. The
+  six IDs are enumerated in the CI audit step, so a *new* langchain CVE still fails the build
 - 📚 **Broaden the catalog** — multi-category data so Recall@k becomes a meaningful benchmark (beyond within-category audio)
 - 🎯 **Lift faithfulness (0.56)** — tighter grounding prompt + wider context window, proven against the eval gate
 - 🔁 **Re-open the reranker** — try title-level reranking (bass/neckband appear in titles) and re-A/B
