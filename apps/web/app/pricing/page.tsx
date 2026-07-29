@@ -1,6 +1,5 @@
 import { Check, Minus } from "lucide-react";
 import { MarketingShell, PageHeader } from "@/components/MarketingShell";
-import { DemoNotice } from "@/components/marketing/DemoNotice";
 import { PricingPlans } from "@/components/PricingPlans";
 
 export const metadata = { title: "Pricing — ProductIQ" };
@@ -39,8 +38,8 @@ export default function PricingPage() {
   return (
     <MarketingShell>
       {/* Pricing tiers (and the SLA line in the comparison table) are illustrative — nothing is
-          actually for sale and no SLA is offered. Say so plainly. */}
-      <DemoNotice />
+          actually for sale and no SLA is offered. The demo banner now comes from
+          MarketingShell, so every marketing page carries it rather than just this one. */}
       <PageHeader
         eyebrow="Pricing"
         title="Plans that scale with you"

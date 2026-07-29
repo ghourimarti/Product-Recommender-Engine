@@ -1,16 +1,23 @@
 import type { ReactNode } from "react";
 import { MarketingNavbar } from "@/components/marketing/MarketingNavbar";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
+import { DemoNotice } from "@/components/marketing/DemoNotice";
 
 /**
  * Wraps every marketing page with the light theme, mega-menu nav, and footer.
  * The `.theme-light` class scopes the light palette so the dark dashboard is
  * completely unaffected.
+ *
+ * DemoNotice is rendered HERE, not per-page, on purpose. It used to be opted
+ * into by individual pages, and only two ever did — so /customers, the single
+ * most claim-heavy page in the site, shipped with no demo disclaimer at all.
+ * A disclaimer you have to remember to add is one you will eventually forget.
  */
 export function MarketingShell({ children }: { children: ReactNode }) {
   return (
     <div className="theme-light min-h-screen flex flex-col bg-mkt-bg">
       <MarketingNavbar />
+      <DemoNotice />
       <main className="flex-1 pt-16">{children}</main>
       <MarketingFooter />
     </div>

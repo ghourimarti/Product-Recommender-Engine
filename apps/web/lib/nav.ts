@@ -1,7 +1,7 @@
 import {
   Search, Star, Sparkles, Shield, Zap, BarChart3, Layers, MessageSquare,
   ShoppingBag, Building2, Shirt, Sofa, Gamepad2, Headphones,
-  BookOpen, Newspaper, FileText, Calendar, Users, Award,
+  BookOpen, Newspaper, FileText, Calendar, Award,
 } from "lucide-react";
 
 export type NavLeaf = { label: string; desc?: string; href: string; icon?: typeof Search };
@@ -30,11 +30,13 @@ export const INDUSTRIES: NavLeaf[] = [
 /* ── Resources ────────────────────────────────────────────────────────────── */
 export const RESOURCES: NavLeaf[] = [
   { label: "Blog",           desc: "Engineering & product notes", href: "/blog",              icon: BookOpen },
-  { label: "Case Studies",   desc: "Real results",                href: "/customers",         icon: Award },
+  // "Case Studies / Real results" and "Wall of Love / What customers say" both pointed at
+  // invented customers. There are none, so they are replaced by the one honest destination:
+  // the measurements the repo can reproduce.
+  { label: "Evidence",       desc: "Numbers you can reproduce",   href: "/customers",         icon: Award },
   { label: "Documentation",  desc: "API & integration guides",    href: "/resources#docs",    icon: FileText },
   { label: "News",           desc: "Announcements",               href: "/resources#news",    icon: Newspaper },
   { label: "Events",         desc: "Webinars & talks",            href: "/resources#events",  icon: Calendar },
-  { label: "Wall of Love",   desc: "What customers say",          href: "/customers#love",    icon: Users },
 ];
 
 /* ── Mega-menu structure ──────────────────────────────────────────────────── */
@@ -58,8 +60,8 @@ export const MEGA: { label: string; columns: NavColumn[]; featured?: NavLeaf }[]
 
 /* ── Flat links (no dropdown) ─────────────────────────────────────────────── */
 export const FLAT_LINKS: NavLeaf[] = [
-  { label: "Customers", href: "/customers" },
-  { label: "Pricing",   href: "/pricing" },
+  { label: "Evidence", href: "/customers" },
+  { label: "Pricing",  href: "/pricing" },
 ];
 
 /* ── Metric badges (used in navbar CTA + homepage) ────────────────────────── */

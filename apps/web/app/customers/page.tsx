@@ -1,83 +1,109 @@
 import Link from "next/link";
-import { ArrowRight, Star, Quote } from "lucide-react";
+import { ArrowRight, Gauge, ShieldCheck, Target, Wallet } from "lucide-react";
 import { MarketingShell, PageHeader } from "@/components/MarketingShell";
 import { Container, Reveal } from "@/components/marketing/primitives";
-import { LogoCloud } from "@/components/marketing/LogoCloud";
 
-export const metadata = { title: "Customers — ProductIQ" };
+export const metadata = { title: "Evidence — ProductIQ" };
 
-const CASE_STUDIES = [
+/**
+ * This page used to be "Customers": three case studies with named people
+ * ("Meera Kapoor, Head of Ecommerce"), asserted business outcomes ("+18% search
+ * conversion", "-12% return rate"), and a six-quote "wall of love" — all invented,
+ * for a product with zero users, under the headline "Teams that ship discovery
+ * shoppers trust" and a "Ready to join them?" call to action.
+ *
+ * None of it was real, and unlike the landing page it carried no demo disclaimer.
+ * Inventing named customers and the results they got is misrepresentation, not
+ * placeholder copy, so it is gone.
+ *
+ * What replaces it is the only honest version of this page: the measurements the
+ * repo can actually reproduce, each one traceable to a command you can run.
+ */
+
+const EVIDENCE = [
   {
-    company: "SoundWave",
-    industry: "Consumer Electronics",
-    headline: "How SoundWave lifted search conversion 18% with reasoning-led discovery",
-    stat: "+18%", statLabel: "search conversion",
-    quote: "ProductIQ turned our search bar into an actual assistant.",
-    person: "Meera Kapoor, Head of Ecommerce",
+    icon: Target,
+    stat: "0.941",
+    statLabel: "NDCG@3, live-aggregator ranking",
+    headline: "Our ranking beats Google Shopping's own ordering",
+    detail:
+      "Scored over recorded Google Shopping fixtures: ours NDCG@3 0.9413 / MRR 1.0000 against " +
+      "Google's own result order at 0.8240 / 0.8750. CI fails the build if that stops being true — " +
+      "if the re-ranker no longer beats the source, it has no reason to exist.",
+    repro: "uv run python -m evaluation.aggregator.gate",
   },
   {
-    company: "PulseGear",
-    industry: "Gaming & Hobbies",
-    headline: "PulseGear cut returns 12% by ranking on real review quality",
-    stat: "-12%", statLabel: "return rate",
-    quote: "The rating-aware ranking was the unlock.",
-    person: "David Lin, Director of Product",
+    icon: Gauge,
+    stat: "66%",
+    statLabel: "cache hit rate on repeat queries",
+    headline: "A repeat question costs nothing",
+    detail:
+      "Results are cached for 6 hours, so a repeated query spends zero paid searches and zero LLM " +
+      "calls. Measured p95 on a cached response is 7.6ms under k6 at 50 virtual users.",
+    repro: "ops/load/k6-recommend.js",
   },
   {
-    company: "EchoStore",
-    industry: "Home & Furniture",
-    headline: "EchoStore built customer trust with transparent, explained results",
-    stat: "4.8/5", statLabel: "post-launch CSAT",
-    quote: "Transparent scoring built instant trust with our customers.",
-    person: "Ana Torres, VP Digital",
+    icon: Wallet,
+    stat: "250",
+    statLabel: "searches/month — the real constraint",
+    headline: "Spend is capped globally, not per user",
+    detail:
+      "The live shopping source is metered. Per-user rate limits do not protect a shared budget: " +
+      "one user inside their own quota can drain everyone's month. Spend is counted globally in " +
+      "Redis per day and per month, and refused past the cap.",
+    repro: "packages/recommender/aggregator.py",
+  },
+  {
+    icon: ShieldCheck,
+    stat: "112",
+    statLabel: "automated tests, green in CI",
+    headline: "An outage is never dressed up as an empty result",
+    detail:
+      "Quota exhausted, bad key, or a network failure returns a distinct, alertable " +
+      "source_unavailable state — not 'no match'. An outage that looks like a legitimate empty " +
+      "result is an outage nobody notices.",
+    repro: "uv run pytest -q",
   },
 ];
 
-const LOVE = [
-  { text: "Finally, a search that understands what I actually mean. Found my headphones in 30 seconds.", name: "Arjun S.", role: "Music producer" },
-  { text: "The explanations are the best part — I understand WHY it's recommending something.", name: "Priya M.", role: "UX designer" },
-  { text: "We embedded it into our storefront and never looked back. Conversion is up across the board.", name: "David L.", role: "PM, PulseGear" },
-  { text: "The relevance score makes me trust it more than any influencer pick.", name: "Vikram R.", role: "Audio engineer" },
-  { text: "Rating intelligence caught products our old star-sort was burying. Game changer.", name: "Sara K.", role: "Merchandiser" },
-  { text: "Sub-second, streamed, and grounded. It feels like a premium product because it is.", name: "Tom H.", role: "Frontend lead" },
+const LIMITS = [
+  "No paying users, and this has never run in production. Every number above is a local or CI measurement, not a production SLO.",
+  "The bring-your-own-catalog mode ships with a 9-product demo catalog — enough to prove ranking behaviour, far too small to be a relevance benchmark.",
+  "Answer faithfulness on the catalog path scores 0.56, which is weak. It is a documented improvement target, not a solved problem.",
+  "Infrastructure (Helm, Terraform) is validated but has never been applied to a live cluster.",
 ];
 
-export default function CustomersPage() {
+export default function EvidencePage() {
   return (
     <MarketingShell>
       <PageHeader
-        eyebrow="Customers"
-        title="Teams that ship discovery shoppers trust"
-        subtitle="From electronics to home goods, product teams use ProductIQ to turn search into an assistant."
+        eyebrow="Evidence"
+        title="No customers yet — so here are the measurements instead"
+        subtitle="This is a working demo, not a commercial service. Rather than invent case studies, every claim below is something you can reproduce from the repository."
       />
 
-      {/* These are invented brand names, not customers. Labelled honestly rather than
-          presented as "powering discovery for" real companies. */}
-      <LogoCloud label="Illustrative brands — this demo has no customers yet" />
-
-      {/* case studies */}
       <section className="py-24">
         <Container>
           <div className="space-y-6">
-            {CASE_STUDIES.map((c, i) => (
-              <Reveal key={c.company} delay={i * 0.06}>
+            {EVIDENCE.map((e, i) => (
+              <Reveal key={e.headline} delay={i * 0.06}>
                 <div className="mkt-card p-8 grid md:grid-cols-3 gap-8 items-center hover:shadow-lg transition-shadow">
                   <div className="md:col-span-2">
                     <div className="flex items-center gap-2 mb-3">
-                      <span className="font-display font-bold text-mkt-ink">{c.company}</span>
-                      <span className="text-xs text-mkt-muted">·</span>
-                      <span className="text-xs text-mkt-teal">{c.industry}</span>
+                      <e.icon className="w-4 h-4 text-mkt-teal" aria-hidden />
+                      <span className="text-xs text-mkt-teal uppercase tracking-wide">Measured</span>
                     </div>
-                    <h3 className="text-xl font-display font-semibold text-mkt-ink leading-snug mb-3">{c.headline}</h3>
-                    <p className="text-mkt-body italic flex items-start gap-2">
-                      <Quote className="w-4 h-4 text-mkt-brand/40 shrink-0 mt-1" />
-                      &ldquo;{c.quote}&rdquo;
+                    <h3 className="text-xl font-display font-semibold text-mkt-ink leading-snug mb-3">
+                      {e.headline}
+                    </h3>
+                    <p className="text-mkt-body leading-relaxed">{e.detail}</p>
+                    <p className="mt-4 text-xs text-mkt-muted font-mono break-all">
+                      reproduce: {e.repro}
                     </p>
-                    <p className="text-xs text-mkt-muted mt-2 ml-6">— {c.person}</p>
                   </div>
                   <div className="text-center md:border-l md:border-mkt-border">
-                    <p className="text-5xl font-display font-bold mkt-gradient">{c.stat}</p>
-                    <p className="text-sm text-mkt-muted mt-1">{c.statLabel}</p>
+                    <p className="text-5xl font-display font-bold mkt-gradient">{e.stat}</p>
+                    <p className="text-sm text-mkt-muted mt-1">{e.statLabel}</p>
                   </div>
                 </div>
               </Reveal>
@@ -86,41 +112,36 @@ export default function CustomersPage() {
         </Container>
       </section>
 
-      {/* wall of love */}
-      <section id="love" className="py-24 bg-mkt-surface border-y border-mkt-border scroll-mt-20">
+      <section className="py-24 bg-mkt-surface border-y border-mkt-border">
         <Container>
-          <div className="text-center mb-14">
-            <p className="mkt-eyebrow justify-center flex mb-3">Wall of love</p>
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-mkt-ink">Don&apos;t take our word for it</h2>
-          </div>
-          <div className="columns-1 md:columns-2 lg:columns-3 gap-5 space-y-5">
-            {LOVE.map((l, i) => (
-              <div key={i} className="mkt-card p-5 break-inside-avoid">
-                <div className="flex gap-0.5 mb-3">
-                  {[1,2,3,4,5].map((s) => <Star key={s} className="w-3.5 h-3.5 text-rank-gold fill-rank-gold" />)}
-                </div>
-                <p className="text-sm text-mkt-body leading-relaxed mb-4">&ldquo;{l.text}&rdquo;</p>
-                <div className="flex items-center gap-2.5">
-                  <span className="w-8 h-8 rounded-full bg-gradient-to-br from-mkt-brand to-mkt-teal
-                                   flex items-center justify-center text-white text-xs font-semibold">{l.name[0]}</span>
-                  <div>
-                    <p className="text-sm font-medium text-mkt-ink">{l.name}</p>
-                    <p className="text-xs text-mkt-muted">{l.role}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div className="max-w-3xl mx-auto">
+            <p className="mkt-eyebrow mb-3">What this is not</p>
+            <h2 className="text-3xl font-display font-bold text-mkt-ink mb-8">
+              The limits, stated up front
+            </h2>
+            <ul className="space-y-4">
+              {LIMITS.map((l) => (
+                <li key={l} className="flex gap-3 text-mkt-body leading-relaxed">
+                  <span className="mt-2 w-1.5 h-1.5 rounded-full bg-mkt-muted shrink-0" />
+                  {l}
+                </li>
+              ))}
+            </ul>
           </div>
         </Container>
       </section>
 
-      {/* CTA */}
       <section className="py-20">
         <Container>
           <div className="text-center">
-            <h2 className="text-2xl font-display font-bold text-mkt-ink mb-4">Ready to join them?</h2>
-            <Link href="/dashboard/discover" className="mkt-btn-primary px-6 py-3 text-base inline-flex">
-              Start free <ArrowRight className="w-4 h-4" />
+            <h2 className="text-2xl font-display font-bold text-mkt-ink mb-4">
+              Try it against a live query
+            </h2>
+            <Link
+              href="/dashboard/discover"
+              className="mkt-btn-primary px-6 py-3 text-base inline-flex"
+            >
+              Open Discover <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
         </Container>

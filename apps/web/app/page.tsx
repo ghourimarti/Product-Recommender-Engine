@@ -4,12 +4,12 @@ import {
   ArrowRight, Check, Brain,
 } from "lucide-react";
 import { MarketingShell } from "@/components/MarketingShell";
-import { DemoNotice } from "@/components/marketing/DemoNotice";
 import { HomeHero } from "@/components/marketing/HomeHero";
 import { MetricsBar } from "@/components/marketing/MetricsBar";
 import { Container, Reveal, SectionHeading } from "@/components/marketing/primitives";
-// LogoCloud ("trusted by" + invented brand names) and TestimonialCarousel (invented quotes) are
-// deliberately NOT rendered: they are fabricated social proof for a product with zero users.
+// LogoCloud and TestimonialCarousel used to live here. Both were fabricated social proof for a
+// product with zero users, so both components have been deleted outright rather than left
+// unrendered — an unused component is one import away from shipping again.
 import { SOLUTIONS } from "@/lib/nav";
 
 /* icon lookup for solutions (nav stores component refs already) */
@@ -24,8 +24,6 @@ const CONNECTED = [
 export default function LandingPage() {
   return (
     <MarketingShell>
-      <DemoNotice />
-
       <HomeHero />
 
       {/* ── Product / capability grid ── */}
