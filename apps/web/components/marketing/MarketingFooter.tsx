@@ -4,7 +4,7 @@ import { SOLUTIONS, INDUSTRIES, RESOURCES } from "@/lib/nav";
 
 const COMPANY = [
   { label: "About",   href: "/about" },
-  { label: "Customers", href: "/customers" },
+  { label: "Evidence", href: "/customers" },
   { label: "Pricing", href: "/pricing" },
   { label: "Contact", href: "/contact" },
   { label: "Careers", href: "#" },
