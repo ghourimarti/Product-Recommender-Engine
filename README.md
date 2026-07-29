@@ -2,7 +2,7 @@
 
 # ProductIQ — Conversational Product Recommender
 
-### Rating-Aware Recommendations, Grounded in Real Customer Reviews
+### One Rating-Aware Ranking Core · Two Retrieval Backends: Your Catalog, or the Live Web
 
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
@@ -26,17 +26,36 @@
 
 ## 🌟 What Is This?
 
-**ProductIQ** is a full-stack, production-grade **conversational product recommender**. You ask in
-plain language — *"good bass earphones for the gym", "cheap bluetooth neckband", "wired headset for
-calls"* — and it returns a **ranked shortlist of real products**, each with a short explanation
-**grounded in genuine customer reviews**, streamed to your browser: the recommendation **cards
-appear first**, then the explanation types in token-by-token below.
+**ProductIQ** is a full-stack **conversational product recommender**. You ask in plain language —
+*"noise cancelling for the office", "good bass earphones for the gym", "wireless earbuds under
+$100"* — and it returns a **ranked shortlist of real, buyable products**, each with a short
+explanation of why it fits, streamed to your browser: the **cards appear first**, then the reasons
+fill in below.
 
-Under the hood it is a **hybrid-retrieval RAG pipeline** with a **rating-aware ranking core**. It
-retrieves candidate products from Qdrant (dense + sparse), ranks them with a blend of
-`semantic relevance × average rating × review-volume confidence`, and an LLM writes the *"why"* —
-**only ever the reasons**, never the product facts, so an injected review can't change what gets
-recommended.
+### One ranking core, two retrieval backends
+
+The interesting part is that **retrieval is pluggable and ranking is not**. The same rating-aware
+ranker, cache, guardrails, and eval methodology sit behind both of these:
+
+| | **[A] Your catalog** | **[B] The live web** |
+|---|---|---|
+| **Endpoints** | `POST /recommend` · `POST /chat` (SSE) | `POST /aggregate` · `POST /aggregate/stream` (SSE) |
+| **Retrieval** | **Qdrant hybrid** — dense (OpenAI `text-embedding-3-small`) + sparse (BM25) over an indexed catalog | **SerpApi / Google Shopping** — one live search per cache miss |
+| **Relevance from** | semantic similarity score | source result `position` (Google already ordered by relevance) |
+| **Data** | `data/products.json` — a **9-product demo catalog**, deliberately small | whatever is live on Google Shopping right now |
+| **Binding constraint** | embedding cost at index time | **metered search quota** (250/month free) → global budget guard |
+| **Wired to the web UI?** | **No** — API + tests only | **Yes** — this is what the screenshots show |
+
+> **Honest scope.** Only **[B]** is wired to the frontend today. **[A]** is fully implemented,
+> tested, and independently eval-gated, but you reach it through the API rather than the UI. The
+> catalog is 9 products — enough to prove the retrieval and ranking behaviour, far too small to be
+> a relevance benchmark, which is why Recall@k on it is not a number worth quoting at you.
+
+**What both backends share:** a ranking blend of
+`semantic/positional relevance × average rating × review-volume confidence` — so a 5★-from-2-reviews
+product can't outrank a 4.5★-from-500 — and an LLM that writes **only the reasons**, never the
+product set. Because ranking is deterministic and the model merely annotates it by `product_id`,
+injected text in a review or a listing **cannot add, remove, or reorder a recommendation**.
 
 
 ---
@@ -54,8 +73,10 @@ recommended.
 | 🛡️ **Security** | Reviews treated as untrusted data · **structural injection-resistance** (LLM writes only reasons; the product set is fixed by ranking) · **PII redaction** in logs · **kill switch** (`LLM_ENABLED=false` → cards without LLM) |
 | 🩹 **Graceful Degradation** | **Circuit breaker → popularity-only ranking** when Qdrant/embeddings fail · Redis-down degrades to cache-miss (rate limiter fails open) · all-LLMs-down → static template |
 | 📊 **Full Observability** | One request = one **OpenTelemetry** trace → Jaeger · **Langfuse** for per-request LLM token/cost/latency · **Prometheus** RED + cache metrics → **Grafana** |
-| 📈 **Eval Gates** | Ranking eval (**NDCG@3 / MRR / Recall@3**) + answer-quality eval (custom LLM judge) with a **CI gate that blocks regression vs baseline** |
-| 🐳 **Deploy-Ready** | Multi-stage **non-root** Docker · 4-layer compose mesh · **Helm** chart (kind → EKS) · **Terraform** (EKS / DynamoDB / ElastiCache / S3 / ECR / IRSA) · GitHub Actions with an eval gate |
+| 💸 **Global Spend Guard** | The live source is **metered** (250 searches/month free) — the binding constraint on the product, not compute. Per-user rate limits don't protect a **shared** budget: one user inside their own quota can drain everyone's month. Spend is therefore counted **globally in Redis** (day + month) and refused past the cap, with a 6h result cache so a repeat query costs **0 searches and 0 LLM calls** |
+| 🚨 **An Outage Is Not an Empty Result** | Any source failure (quota exhausted, bad key, network) used to return `no_match=true` — indistinguishable from "we genuinely found nothing", so **nobody could tell the product was broken**. Failures now return a distinct `source_unavailable` state with a reason and a `source_unavailable_total{reason}` counter — an **alertable** condition |
+| 📈 **Eval Gate That Can Fail the Build** | Two guards on every PR: NDCG@3/MRR must hold within tolerance of a frozen baseline, **and our ranking must still beat Google Shopping's own ordering** (ours **0.9413 / 1.0000** vs Google **0.8240 / 0.8750**). If guard 2 breaks, the re-ranker has stopped earning its place and CI goes red rather than shipping it. Runs on recorded fixtures — no services, no keys, no paid quota |
+| 🐳 **Deploy Path** | Multi-stage **non-root** Docker · 3-file compose mesh · **Helm** chart (kind → EKS) · **Terraform** (EKS / DynamoDB / ElastiCache / S3 / ECR / IRSA). Local Docker is verified end-to-end; **Helm and Terraform are validated but have never been applied to a live cluster** — see [Results](#-results-real-numbers-honest-scope) |
 
 ---
 
@@ -88,23 +109,38 @@ recommended.
                             │  REST + SSE (EventSource)
 ┌───────────────────────────┼──────────────────────────────────────────┐
 │                     FastAPI  Backend  (async)                         │
-│  POST /recommend (cached, ranking-only)   POST /chat (SSE stream)     │
-│  GET /health   GET /metrics                                           │
+│  [B] POST /aggregate · /aggregate/stream   ← what the web UI calls    │
+│  [A] POST /recommend · POST /chat (SSE)    ← catalog path, API-only   │
+│      DELETE /account · GET /account/export · GET /health · /metrics   │
 │  JWT auth (Clerk/dev) · per-user rate limit · kill switch · PII log   │
-└──────┬───────────────────┬──────────────────────┬────────────────────┘
-       │                   │                      │
-┌──────┼──────┐   ┌────────┼─────────┐   ┌────────┼─────────┐
-│  Qdrant     │   │   DynamoDB       │   │   Redis (cache)  │
-│  hybrid RAG │   │  single-table    │   │  L1 embeddings   │
-│  dense+     │   │  chat history    │   │  L3 responses    │
-│  sparse     │   │  (per-user PK)   │   │  + rate limits   │
-│  + semantic │   │  PITR + TTL      │   └──────────────────┘
-│  cache (L2) │   └──────────────────┘
-└──────┬──────┘
-       │  candidates + payload (avg_rating, review_count)
-┌──────┼────────────────────────────────────────────────────────────────┐
-│  RATING-AWARE RANKER   final = 0.7·relevance + 0.3·rating·volume        │
-│  → grounded explanation (LangChain structured output)                   │
+└──────┬──────────────────────┬────────────────┬──────────────────────┘
+       │                      │                │
+┌──────┴───────────┐  ┌───────┴────────┐  ┌────┴─────────────┐
+│ [A] Qdrant       │  │ [B] SerpApi    │  │  Redis           │
+│  hybrid RAG      │  │  Google        │  │  L1 embeddings   │
+│  dense + sparse  │  │  Shopping      │  │  L3 responses    │
+│  + semantic      │  │  (LIVE, PAID)  │  │  agg cache (6h)  │
+│    cache (L2)    │  │                │  │  rate limits     │
+└──────┬───────────┘  └───────┬────────┘  │  GLOBAL SerpApi  │
+       │                      │           │   spend counter  │
+       │                      │           └────┬─────────────┘
+       │                      │                │
+       │                      │        ┌───────┴──────────┐
+       │                      │        │   DynamoDB       │
+       │                      │        │  single-table    │
+       │                      │        │  chat history    │
+       │                      │        │  (per-user PK)   │
+       │                      │        │  PITR + TTL      │
+       │                      │        └──────────────────┘
+       │  candidates          │  offers (rating, reviews, price, store)
+       │  (avg_rating,        │
+       │   review_count)      │   ── budget exceeded / source down?
+       │                      │      → source_unavailable (alertable),
+       │                      │        NOT "no match"
+┌──────┴──────────────────────┴──────────────────────────────────────────┐
+│  SHARED RATING-AWARE RANKER  final = 0.7·relevance + 0.3·rating·volume  │
+│  [A] relevance = semantic score   ·   [B] relevance = source position   │
+│  → grounded reasons (LangChain structured output; ranker fixes the set) │
 └──────┬─────────────────────────────────────────────────────────────────┘
 ┌──────┼─────────────────────────────────────────────────────────────────┐
 │  LLM gateway · Groq llama-3.3-70b → OpenAI gpt-4o → Anthropic (fallback) │
@@ -116,17 +152,40 @@ recommended.
 ### Request Flow
 
 ```
-[User]  sign in (Clerk / dev token) → ask: "good bass earphones for the gym"
+[B] LIVE AGGREGATOR — the path the web UI uses
+
+[User]  sign in (Clerk / dev token) → ask: "noise cancelling for the office"
    │
    ▼
+POST /aggregate/stream  ──►  auth + per-user rate limit
+   │
+   ├─► 6h result cache HIT?  ──► emit "final" immediately.  0 searches, 0 LLM calls.
+   │
+   ├─► MISS → check the GLOBAL day/month SerpApi budget
+   │            └─ exhausted? → "final" with source_unavailable  (alertable, NOT no_match)
+   │
+   ├─► 1 live SerpApi search  ──► rank offers (position × rating × review volume)
+   │            └─ search failed? → source_unavailable  (alertable, NOT no_match)
+   │
+   ├─► SSE event "offers"   ── CARDS RENDER HERE, before the LLM has written anything
+   ├─► SSE event "final"    ── grounded reason per offer + summary; result cached 6h
+   └─► SSE event "done"
+
+   Why staged: the blocking /aggregate made the user wait for search AND the LLM
+   (measured cold 2.94s, breaching the p95 < 2s NFR). Cards now land ~1–1.5s earlier.
+
+
+[A] CATALOG PATH — API only, not wired to the UI
+
 POST /chat  ──►  auth + rate-limit  ──►  (history-aware rewrite if prior turns)
    │
    ├─► cached_recommend:  L3 exact → L1 embed → L2 semantic → Qdrant hybrid retrieve
    │                       → rating-aware rank  →  RankingResult (cards)
    │
-   ├─► SSE event "recommendations"   ── cards render FIRST
-   ├─► SSE events "token" ...         ── grounded explanation streams in
-   └─► SSE event "done"               ── persist turn to DynamoDB (per-user)
+   ├─► SSE "recommendations" → SSE "token"… → SSE "done"  (persist turn to DynamoDB)
+   │
+   └─► output guardrail: tokens held back 200 chars so a system-prompt leak is caught
+        before any of it reaches the client
 
    (Qdrant down → circuit breaker → popularity-only ranking; LLM down → static template)
 ```
@@ -170,7 +229,8 @@ P2-Product-Recommendion-engine/            # uv workspace (monorepo)
 | **Orchestration** | LangChain (LCEL) · history-aware rewrite · **structured-output** grounded explanations |
 | **LLM** | **Groq** `llama-3.3-70b` (primary) → OpenAI `gpt-4o` → Anthropic (fallback, key-gated) |
 | **Embeddings** | OpenAI `text-embedding-3-small` @ **1536-d** |
-| **Vector RAG** | **Qdrant** hybrid (dense + BM25 sparse) · payload filtering · semantic cache collection |
+| **Retrieval [A]** | **Qdrant** hybrid (dense + BM25 sparse) · payload filtering · semantic cache collection |
+| **Retrieval [B]** | **SerpApi** Google Shopping — live offers (price, store, rating, review count); **metered**, guarded by a global Redis day/month budget + 6h result cache |
 | **Reranker** | `bge-reranker-base` cross-encoder (fastembed) — **A/B-tested, gated off** (regressed NDCG) |
 | **Primary DB** | **DynamoDB** single-table (chat history, per-user isolation, PITR + TTL) |
 | **Cache** | Redis 4-layer (in-proc memo · embedding · semantic → Qdrant · response) |
@@ -194,8 +254,12 @@ P2-Product-Recommendion-engine/            # uv workspace (monorepo)
 - **Python 3.12** and [`uv`](https://docs.astral.sh/uv/) (uv provisions 3.12 for you)
 - **Docker + Docker Compose**
 - **Node 22 + npm** (only for native web dev; the Docker path builds the web for you)
-- An **`OPENAI_API_KEY`** — required (embeddings + fallback LLM). `GROQ_API_KEY` (primary LLM) and
-  `ANTHROPIC_API_KEY` are optional; without any LLM key, `/recommend` still works (ranking-only).
+- A **`SERPAPI_API_KEY`** — required for the **live aggregator**, which is what the web UI calls.
+  Free plan is **250 searches/month** and every cache miss spends one; a global day/month budget
+  guard is on by default. Without it the UI returns an honest `source_unavailable`, not results.
+- An **`OPENAI_API_KEY`** — required for the **catalog path** (embeddings for `make seed`,
+  `/recommend`, `/chat`) and used as an LLM fallback rung. `GROQ_API_KEY` (primary LLM) and
+  `ANTHROPIC_API_KEY` are optional; without any LLM key, ranking still works, reasons don't.
 
 ### 1 · Install & configure
 ```bash
@@ -368,10 +432,25 @@ make check               # lint + types + tests (the green gate)
 
 ## 📋 Environment Variables
 
-Copy `.env.example` → `.env`. **Only `OPENAI_API_KEY` is required.** (Full annotated list is in
-`.env.example`; host ports default to a `2001–2012` scheme.)
+Copy `.env.example` → `.env`. (Full annotated list is in `.env.example`; host ports default to a
+`2001–2012` scheme.)
+
+**Two keys matter, and which one depends on which backend you want:**
+
+| Key | Needed for | If missing |
+|---|---|---|
+| `SERPAPI_API_KEY` | **[B] the live aggregator** — `/aggregate`, and therefore the whole web UI | The UI returns `source_unavailable`. **Free plan = 250 searches/month**, and every cache **miss** spends one. |
+| `OPENAI_API_KEY` | **[A] the catalog path** — embeddings for indexing + retrieval; also the LLM fallback rung | `/recommend` and `/chat` cannot embed. `/aggregate` still ranks, but writes no reasons unless a Groq/Anthropic key is set. |
+
+`GROQ_API_KEY` (primary LLM, cheapest/fastest) and `ANTHROPIC_API_KEY` (last fallback rung) are
+optional and inert if empty.
 
 ```env
+# ── Live shopping source (REQUIRED for /aggregate — metered!) ──
+SERPAPI_API_KEY=           # https://serpapi.com/manage-api-key
+SERPAPI_DAILY_BUDGET=40    # global spend guard; 0 disables the cap
+SERPAPI_MONTHLY_BUDGET=250 # free-plan ceiling
+
 # ── LLM providers (Groq primary; others optional fallback rungs) ──
 OPENAI_API_KEY=            # REQUIRED (embeddings + fallback LLM)
 GROQ_API_KEY=              # optional — primary LLM (cheapest/fastest); inert if empty
@@ -460,7 +539,26 @@ data: {"no_match":false}
 
 ---
 
-## 🧠 How the RAG Recommender Works
+## 🧠 How It Works
+
+Steps 1, 4, 5, 6 and 7 are **shared by both backends** — that is the point of the design. Steps 2
+and 3 are what differ.
+
+### [B] Live aggregator — `/aggregate/stream` (the path the UI calls)
+
+1. **Authenticate + rate-limit** — per-user JWT + Redis token bucket, as below.
+2. **Cache, then *budget*, then search** — a 6h result cache is checked first (a hit costs **0
+   searches and 0 LLM calls**). On a miss, the **global** day/month SerpApi budget is checked
+   *before* spending, because a per-user limit cannot protect a shared quota. Only then does one
+   live search go out.
+3. **Fail loudly, not silently** — budget exhausted, bad key, or network error returns
+   `source_unavailable` with a reason and increments `source_unavailable_total{reason}`. It is
+   **never** reported as "no match", because an outage that looks like an empty result is an
+   outage nobody notices.
+4. **Rank** → 5. **Explain** → 6. **Observe** → 7. **Degrade** — as below. Cards are emitted
+   *before* the LLM runs, so they paint ~1–1.5s earlier.
+
+### [A] Catalog path — `/chat`, `/recommend`
 
 1. **Authenticate + rate-limit** — the Bearer JWT (Clerk or dev HS256) is verified; its subject
    becomes the `user_id` that scopes history + rate-limit buckets (`429` on abuse).
