@@ -15,12 +15,23 @@ __pycache__/
 node_modules/
 .next/
 dist/
+*.tsbuildinfo
+# npm bin shims land here when a package is installed at the repo root by mistake.
+/playwright
+/playwright.cmd
+/playwright.ps1
 
 # Terraform
 .terraform/
 *.tfstate
 *.tfstate.*
+# Plan files embed state (and can embed secrets). `*.tfplan` alone missed the
+# extensionless default name `terraform plan -out=tfplan` produces.
+tfplan
 *.tfplan
+
+# Vendored installer scripts (fetch them, don't commit them)
+get_helm.sh
 
 # OS / IDE
 .DS_Store
@@ -31,7 +42,9 @@ READMEcopy.md
 Prompts/
 demo/
 old/
-screenshots/
+# NOTE: screenshots/ is deliberately NOT ignored. It is embedded in the README,
+# so it is published material. Ignoring it once meant a stale screenshot (showing
+# social proof the app no longer renders) silently survived a UI rewrite.
 
 # Local editor / assistant tooling
 .claude/
