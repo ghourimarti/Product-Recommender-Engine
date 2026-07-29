@@ -7,9 +7,8 @@ on:
 
 jobs:
   quality:
-    # Lint + types + offline unit tests. No external services, no API keys, no paid
-    # SerpApi calls — the unit suite includes the eval-logic tests (ranking metrics,
-    # offer ranking, cache conservation) so this job IS the fast eval/regression gate.
+    # Lint + types + offline unit tests + the ranking-quality eval gate.
+    # No external services, no API keys, no paid SerpApi calls.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +24,19 @@ jobs:
         run: uv run mypy packages apps tests
       - name: Unit tests (offline)
         run: uv run pytest -q -m "not integration"
+
+      # Quality gate for the SHIPPED /aggregate ranking path. Reads recorded SerpApi
+      # fixtures, so it needs no services and no API keys and spends no paid quota —
+      # which is why it can block every PR. Two guards: NDCG@3/MRR must stay within
+      # tolerance of the frozen baseline, AND our ordering must still beat Google
+      # Shopping's own result order. If the second fails, the re-ranker has stopped
+      # earning its place and the build should go red rather than ship it.
+      #
+      # The static-catalog gate (`evaluation.ranking.gate`) is NOT run here: it needs a
+      # seeded Qdrant plus OPENAI_API_KEY for embeddings. Run it locally via
+      # `make eval-gate`.
+      - name: Eval gate (ranking regression)
+        run: uv run python -m evaluation.aggregator.gate
 
   frontend:
     runs-on: ubuntu-latest
