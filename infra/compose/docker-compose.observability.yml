@@ -33,7 +33,9 @@ name: p2-recommender
 # Shared Langfuse env (web + worker). Kept here (not a separate file) so the
 # whole observability tier lives in ONE compose file.
 x-langfuse-shared: &langfuse-shared
-  DATABASE_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD:-langfuse-local-dev}@langfuse-postgres:5432/langfuse
+  # user + db name wired to the same LANGFUSE_POSTGRES_* env-vars as the postgres
+  # service below, so renaming the DB user/name in .env keeps the app connected.
+  DATABASE_URL: postgresql://${LANGFUSE_POSTGRES_USER:-langfuse}:${LANGFUSE_POSTGRES_PASSWORD:-langfuse-local-dev}@langfuse-postgres:5432/${LANGFUSE_POSTGRES_DB:-langfuse}
   CLICKHOUSE_URL: http://langfuse-clickhouse:8123
   CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
   CLICKHOUSE_USER: langfuse
@@ -110,10 +112,63 @@ services:
   redisinsight:
     image: redis/redisinsight:latest
     container_name: p2-redisinsight
+    # RIACCEPTEULA skips the "accept terms" splash on first UI visit; harmless if
+    # unrecognised by future image versions.
+    environment:
+      RIACCEPTEULA: "true"
+      RI_ACCEPT_TERMS_AND_CONDITIONS: "true"
     volumes:
       - redisinsight_data:/data
     ports:
       - "${REDISINSIGHT_PORT:-2005}:5540"
+
+  redisinsight-init:
+    # One-shot sidecar: pre-registers both Redis DBs (p2-redis app cache +
+    # p2-langfuse-redis queue) inside RedisInsight so you don't add them by hand
+    # after every fresh volume. Idempotent: if RedisInsight already knows about
+    # any databases (previous boot, or you added some manually), this exits
+    # without changing anything.
+    image: curlimages/curl:8.10.1
+    container_name: p2-redisinsight-init
+    depends_on:
+      redisinsight:
+        condition: service_started
+    environment:
+      LANGFUSE_REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:-langfuse-local-dev}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        # Poll until RedisInsight's HTTP API is up (max ~60s).
+        for i in $$(seq 1 30); do
+          code=$$(curl -sfo /dev/null -w "%{http_code}" http://redisinsight:5540/api/databases || echo 000)
+          if [ "$$code" = "200" ]; then break; fi
+          sleep 2
+        done
+        # Idempotency: skip if any DBs already present (persisted in redisinsight_data volume).
+        existing=$$(curl -sf http://redisinsight:5540/api/databases 2>/dev/null || printf '[]')
+        if [ "$$existing" != "[]" ] && [ "$$(printf '%s' "$$existing" | wc -c)" -gt 3 ]; then
+          echo "redisinsight-init: databases already registered - skipping"
+          exit 0
+        fi
+        # Register p2-redis (app cache, no auth).
+        if curl -sfX POST http://redisinsight:5540/api/databases \
+             -H 'Content-Type: application/json' \
+             -d '{"name":"p2-redis (app cache)","host":"redis","port":6379,"db":0,"tls":false}' >/dev/null; then
+          echo "redisinsight-init: registered p2-redis"
+        else
+          echo "redisinsight-init: p2-redis registration failed (RI may still be booting)"
+        fi
+        # Register p2-langfuse-redis (password-protected).
+        if curl -sfX POST http://redisinsight:5540/api/databases \
+             -H 'Content-Type: application/json' \
+             -d "{\"name\":\"p2-langfuse-redis\",\"host\":\"langfuse-redis\",\"port\":6379,\"password\":\"$${LANGFUSE_REDIS_AUTH}\",\"tls\":false}" >/dev/null; then
+          echo "redisinsight-init: registered p2-langfuse-redis"
+        else
+          echo "redisinsight-init: p2-langfuse-redis registration failed"
+        fi
+        echo "redisinsight-init: done"
+    restart: "no"
 
   # ── Langfuse — self-hosted LLM observability (6 services) ──────────────────
   langfuse-web:
@@ -169,13 +224,23 @@ services:
     container_name: p2-langfuse-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: langfuse
+      # User + DB name env-driven so pgAdmin/DBeaver logins are discoverable in
+      # .env and remappable. The x-langfuse-shared DATABASE_URL above uses the
+      # same three vars, so the app stays in sync automatically.
+      POSTGRES_USER: ${LANGFUSE_POSTGRES_USER:-langfuse}
       POSTGRES_PASSWORD: ${LANGFUSE_POSTGRES_PASSWORD:-langfuse-local-dev}
-      POSTGRES_DB: langfuse
+      POSTGRES_DB: ${LANGFUSE_POSTGRES_DB:-langfuse}
+    # Published to host so psql/DBeaver work directly. Langfuse UI/worker still
+    # reach this by container name (langfuse-postgres:5432) — the internal wiring
+    # is unaffected. Change LANGFUSE_POSTGRES_PORT in .env if 2013 collides.
+    ports:
+      - "${LANGFUSE_POSTGRES_PORT:-2013}:5432"
     volumes:
       - langfuse_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      # Uses the container's own POSTGRES_USER/POSTGRES_DB env vars so it stays
+      # correct if you rename them in .env.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -188,6 +253,12 @@ services:
       CLICKHOUSE_DB: default
       CLICKHOUSE_USER: langfuse
       CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-langfuse-local-dev}
+    # 8123 = HTTP query interface; 9000 = native TCP protocol. Both published so
+    # you can hit http://localhost:${LANGFUSE_CLICKHOUSE_HTTP_PORT}/play or connect
+    # a native client. Langfuse itself uses the container-internal ports.
+    ports:
+      - "${LANGFUSE_CLICKHOUSE_HTTP_PORT:-2014}:8123"
+      - "${LANGFUSE_CLICKHOUSE_NATIVE_PORT:-2015}:9000"
     volumes:
       - langfuse_clickhouse_data:/var/lib/clickhouse
       - langfuse_clickhouse_logs:/var/log/clickhouse-server
@@ -207,6 +278,10 @@ services:
     command: >
       redis-server
       --requirepass ${LANGFUSE_REDIS_AUTH:-langfuse-local-dev}
+    # Published so RedisInsight (or redis-cli) can hit it directly on host.
+    # Auth password = LANGFUSE_REDIS_AUTH in .env.
+    ports:
+      - "${LANGFUSE_REDIS_PORT:-2016}:6379"
     volumes:
       - langfuse_redis_data:/data
     healthcheck:
@@ -220,7 +295,7 @@ services:
   langfuse-minio:
     # Pre-creates the "langfuse" bucket via mkdir before starting the server,
     # so Langfuse doesn't 404 on the first S3 write. Same trick the official
-    # Langfuse compose uses. Console kept internal — no host port.
+    # Langfuse compose uses. S3 API + web console both published to host.
     image: minio/minio:latest
     container_name: p2-langfuse-minio
     restart: unless-stopped
@@ -230,6 +305,10 @@ services:
     environment:
       MINIO_ROOT_USER: minio
       MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_ROOT_PASSWORD:-langfuse-local-dev}
+    # 9000 = S3 API; 9001 = web console (login = minio / LANGFUSE_MINIO_ROOT_PASSWORD).
+    ports:
+      - "${LANGFUSE_MINIO_API_PORT:-2017}:9000"
+      - "${LANGFUSE_MINIO_CONSOLE_PORT:-2018}:9001"
     volumes:
       - langfuse_minio_data:/data
     healthcheck:

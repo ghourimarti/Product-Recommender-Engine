@@ -2,7 +2,7 @@
         eval-ranking eval-rag eval-gate \
         serve build-backend \
         db services app obs observability langfuse full up upv \
-        ps logs down downv seed bootstrap urls \
+        ps logs down downv seed bootstrap urls wait-api \
         helm-lint
 
 # ─── Layered local stack ──────────────────────────────────────────────────────
@@ -123,7 +123,7 @@ langfuse:       ## Langfuse self-host ONLY (web + worker + postgres + clickhouse
 
 full:           ## everything: db + app + observability + langfuse
 	$(DC_FULL) up --build -d
-	@echo ""
+	@$(MAKE) --no-print-directory wait-api
 	@$(MAKE) --no-print-directory urls
 
 up: full        ## Alias for `full` (backwards-compat with older Makefile)
@@ -164,7 +164,7 @@ upv:            ## FROM ZERO: downv + build + start ALL tiers + seed catalog (~5
 	@echo "  Cold bootstrap complete."
 	@echo "  Langfuse cold-start migrations continue for ~30-90s in the background;"
 	@echo "  the first /chat call may take a moment to trace, then it's steady-state."
-	@echo ""
+	@$(MAKE) --no-print-directory wait-api
 	@$(MAKE) --no-print-directory urls
 
 
@@ -176,6 +176,7 @@ seed:           ## Aggregate CSV → JSON, then embed + index into Qdrant
 
 bootstrap:      ## FROM SCRATCH: bring app tier up, index catalog, print URLs
 	$(DC_APP) up --build -d
+	@$(MAKE) --no-print-directory wait-api
 	@$(MAKE) --no-print-directory seed
 	@echo ""
 	@echo "  Bootstrap complete — services up, catalog indexed."
@@ -190,28 +191,64 @@ helm-lint:      ## Lint the Helm chart + validate rendered manifests
 	helm template p2 ops/helm/p2-recommender | kubeconform -summary
 
 
-# ─── URLs  (prints every host-side endpoint, sourced from .env) ───────────────
+# ─── wait-api  (poll API /health after boot; used by full/upv/bootstrap) ──────
 
-urls:           ## Print which URL opens which UI (ports come from .env)
+wait-api:       ## Poll API /health until 2xx (max ~60s). Prints status; exits 0 either way.
+	@set -a; . ./.env 2>/dev/null || true; set +a; \
+	port=$${API_PORT:-2011}; \
+	echo ""; \
+	echo "  Waiting for the API to report healthy (up to 60s)..."; \
+	echo "  Note: Langfuse cold start can take 1-3 min more (ClickHouse + migrations)."; \
+	echo "  First-ever run also needs 'make seed' (or use 'make upv')."; \
+	for i in $$(seq 1 60); do \
+	  if curl -sfo /dev/null "http://localhost:$$port/health" 2>/dev/null; then \
+	    echo "  API healthy at http://localhost:$$port/health"; \
+	    exit 0; \
+	  fi; \
+	  sleep 1; \
+	done; \
+	echo "  API did not report healthy in 60s. Check: docker logs -f p2-api"; \
+	exit 0
+
+
+# ─── URLs  (prints the P2 service directory, sourced from .env) ───────────────
+
+urls:           ## Print the P2 service directory (URLs, logins, ports; sourced from .env)
 	@set -a; . ./.env 2>/dev/null || true; set +a; \
 	echo ""; \
-	echo "  P2 Recommender — local URLs   (ports sequenced by startup order in .env)"; \
-	echo "  -------------------------------------------------------------------------"; \
-	echo "  -- data tier (starts 1st) --"; \
-	echo "  Qdrant dashboard      http://localhost:$${QDRANT_HTTP_PORT:-2001}/dashboard"; \
-	echo "  Qdrant gRPC           localhost:$${QDRANT_GRPC_PORT:-2002}"; \
-	echo "  DynamoDB-local        localhost:$${DYNAMODB_PORT:-2003}   (no UI; table auto-created)"; \
-	echo "  Redis                 localhost:$${REDIS_PORT:-2004}   (redis-cli or RedisInsight below)"; \
-	echo "  -- observability tier --"; \
-	echo "  RedisInsight          http://localhost:$${REDISINSIGHT_PORT:-2005}   (add host=redis port=6379)"; \
-	echo "  Jaeger (traces)       http://localhost:$${JAEGER_UI_PORT:-2006}   (service: p2-recommender)"; \
-	echo "  Prometheus            http://localhost:$${PROMETHEUS_PORT:-2009}   (Status → Targets)"; \
-	echo "  Grafana               http://localhost:$${GRAFANA_PORT:-2010}   (login: $${GRAFANA_ADMIN_USER:-admin}/$${GRAFANA_ADMIN_PASSWORD:-admin})"; \
-	echo "  Langfuse (LLM traces) http://localhost:$${LANGFUSE_UI_PORT:-2008}   (login: $${LANGFUSE_INIT_USER_EMAIL:-admin@example.com}/$${LANGFUSE_INIT_USER_PASSWORD:-changeme})"; \
-	echo "  -- app tier (starts last) --"; \
-	echo "  API docs (Swagger)    http://localhost:$${API_PORT:-2011}/docs"; \
-	echo "  API health            http://localhost:$${API_PORT:-2011}/health"; \
-	echo "  API metrics (raw)     http://localhost:$${API_PORT:-2011}/metrics"; \
-	echo "  Web (Next.js)         http://localhost:$${WEB_PORT:-2012}"; \
-	echo "  -------------------------------------------------------------------------"; \
+	echo "  ========================================================================"; \
+	echo "   P2 Recommender - service directory   (open the http:// links below)"; \
+	echo "  ========================================================================"; \
+	echo ""; \
+	echo "  [ OPEN IN BROWSER ]"; \
+	echo "    Web app             http://localhost:$${WEB_PORT:-2012}"; \
+	echo "    API docs (Swagger)  http://localhost:$${API_PORT:-2011}/docs"; \
+	echo "    API health          http://localhost:$${API_PORT:-2011}/health"; \
+	echo "    API metrics (raw)   http://localhost:$${API_PORT:-2011}/metrics"; \
+	echo "    Qdrant dashboard    http://localhost:$${QDRANT_HTTP_PORT:-2001}/dashboard"; \
+	echo "    Jaeger (traces)     http://localhost:$${JAEGER_UI_PORT:-2006}     (service: p2-recommender)"; \
+	echo "    Langfuse (LLM)      http://localhost:$${LANGFUSE_UI_PORT:-2008}"; \
+	echo "        login:          $${LANGFUSE_INIT_USER_EMAIL:-admin@example.com} / $${LANGFUSE_INIT_USER_PASSWORD:-changeme}"; \
+	echo "    Prometheus          http://localhost:$${PROMETHEUS_PORT:-2009}     (Status > Targets)"; \
+	echo "    Grafana (metrics)   http://localhost:$${GRAFANA_PORT:-2010}     (Prometheus DS + dashboards pre-provisioned)"; \
+	echo "        login:          $${GRAFANA_ADMIN_USER:-admin} / $${GRAFANA_ADMIN_PASSWORD:-admin}"; \
+	echo "    RedisInsight        http://localhost:$${REDISINSIGHT_PORT:-2005}     (both p2-redis + p2-langfuse-redis pre-added)"; \
+	echo "    MinIO console       http://localhost:$${LANGFUSE_MINIO_CONSOLE_PORT:-2018}"; \
+	echo "        login:          minio / $${LANGFUSE_MINIO_ROOT_PASSWORD:-langfuse-local-dev}"; \
+	echo ""; \
+	echo "  [ DATA TIER ]  (client tools - no web UI)"; \
+	echo "    Qdrant HTTP/gRPC    localhost:$${QDRANT_HTTP_PORT:-2001} / localhost:$${QDRANT_GRPC_PORT:-2002}   (or dashboard above)"; \
+	echo "    DynamoDB local      localhost:$${DYNAMODB_PORT:-2003}   (no UI; table auto-created on first API call)"; \
+	echo "    Redis (app cache)   localhost:$${REDIS_PORT:-2004}   no password   (or RedisInsight above)"; \
+	echo ""; \
+	echo "  [ OBSERVABILITY TIER ]  (make obs)"; \
+	echo "    OTLP receiver       localhost:$${OTEL_OTLP_GRPC_PORT:-2007} gRPC   (api sends spans to jaeger:4317 inside the network)"; \
+	echo "    Langfuse Postgres   localhost:$${LANGFUSE_POSTGRES_PORT:-2013}"; \
+	echo "        login:          user=$${LANGFUSE_POSTGRES_USER:-langfuse} / password=$${LANGFUSE_POSTGRES_PASSWORD:-langfuse-local-dev} / db=$${LANGFUSE_POSTGRES_DB:-langfuse}   (psql / pgAdmin / DBeaver)"; \
+	echo "    Langfuse ClickHouse http://localhost:$${LANGFUSE_CLICKHOUSE_HTTP_PORT:-2014}   (HTTP query; native: localhost:$${LANGFUSE_CLICKHOUSE_NATIVE_PORT:-2015})"; \
+	echo "    Langfuse Redis      localhost:$${LANGFUSE_REDIS_PORT:-2016}   password=$${LANGFUSE_REDIS_AUTH:-langfuse-local-dev}"; \
+	echo "    MinIO S3 API        http://localhost:$${LANGFUSE_MINIO_API_PORT:-2017}   (console is above)"; \
+	echo ""; \
+	echo "  Metrics flow: app -> Prometheus (/metrics scrape) -> Grafana; traces -> Jaeger; LLM traces -> Langfuse."; \
+	echo "  ========================================================================"; \
 	echo ""
