@@ -42,9 +42,13 @@ READMEcopy.md
 Prompts/
 demo/
 old/
-# NOTE: screenshots/ is deliberately NOT ignored. It is embedded in the README,
-# so it is published material. Ignoring it once meant a stale screenshot (showing
-# social proof the app no longer renders) silently survived a UI rewrite.
+# Screenshots are not published. The previous set was captured before the UI was
+# cleaned of fabricated social proof, so the committed landing-page image still
+# advertised "4.8/5 by 2,400+ users" and six invented customer logos that the app
+# no longer renders. Rather than ship stale marketing imagery, the README documents
+# behaviour in text and the eval reports carry the evidence.
+# If screenshots are re-added later they must be captured AFTER a UI change, not before.
+screenshots/
 
 # Local editor / assistant tooling
 .claude/

@@ -6,14 +6,14 @@
 
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![LangChain](https://img.shields.io/badge/LangChain-LCEL-1C3C3C?style=flat-square&logo=langchain&logoColor=white)](#-how-the-rag-recommender-works)
+[![LangChain](https://img.shields.io/badge/LangChain-LCEL-1C3C3C?style=flat-square&logo=langchain&logoColor=white)](#-how-it-works)
 [![LLM](https://img.shields.io/badge/LLM-Groq%20%E2%86%92%20OpenAI%20%E2%86%92%20Anthropic-412991?style=flat-square&logo=openai&logoColor=white)](#-tech-stack)
 [![Qdrant](https://img.shields.io/badge/Qdrant-Hybrid%20RAG-DC244C?style=flat-square&logo=qdrant&logoColor=white)](https://qdrant.tech)
 [![DynamoDB](https://img.shields.io/badge/DynamoDB-Single%20Table-4053D6?style=flat-square&logo=amazondynamodb&logoColor=white)](#%EF%B8%8F-database-schema-chat-history)
-[![Redis](https://img.shields.io/badge/Redis-4--Layer%20Cache-DC382D?style=flat-square&logo=redis&logoColor=white)](#-how-the-rag-recommender-works)
+[![Redis](https://img.shields.io/badge/Redis-4--Layer%20Cache-DC382D?style=flat-square&logo=redis&logoColor=white)](#-how-it-works)
 [![Clerk](https://img.shields.io/badge/Auth-Clerk%20%C2%B7%20JWT-6C47FF?style=flat-square&logo=clerk&logoColor=white)](#-security)
-[![Next.js](https://img.shields.io/badge/Next.js-15%20%2F%20React%2019-000000?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org)
-[![Observability](https://img.shields.io/badge/OTel%20%C2%B7%20Langfuse%20%C2%B7%20Prometheus%20%C2%B7%20Grafana-Tracing-F46800?style=flat-square&logo=opentelemetry&logoColor=white)](#-observability)
+[![Next.js](https://img.shields.io/badge/Next.js-16%20%2F%20React%2019-000000?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![Observability](https://img.shields.io/badge/OTel%20%C2%B7%20Langfuse%20%C2%B7%20Prometheus%20%C2%B7%20Grafana-Tracing-F46800?style=flat-square&logo=opentelemetry&logoColor=white)](#-tech-stack)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
 [![Kubernetes](https://img.shields.io/badge/K8s-Helm%20%E2%86%92%20EKS-326CE5?style=flat-square&logo=kubernetes&logoColor=white)](#-deployment)
 [![Terraform](https://img.shields.io/badge/Terraform-EKS%2FDynamoDB%2FECR-7B42BC?style=flat-square&logo=terraform&logoColor=white)](#-deployment)
@@ -44,7 +44,7 @@ ranker, cache, guardrails, and eval methodology sit behind both of these:
 | **Relevance from** | semantic similarity score | source result `position` (Google already ordered by relevance) |
 | **Data** | `data/products.json` — a **9-product demo catalog**, deliberately small | whatever is live on Google Shopping right now |
 | **Binding constraint** | embedding cost at index time | **metered search quota** (250/month free) → global budget guard |
-| **Wired to the web UI?** | **No** — API + tests only | **Yes** — this is what the screenshots show |
+| **Wired to the web UI?** | **No** — API + tests only | **Yes** — the dashboard's Discover page calls this |
 
 > **Honest scope.** Only **[B]** is wired to the frontend today. **[A]** is fully implemented,
 > tested, and independently eval-gated, but you reach it through the API rather than the UI. The
@@ -80,29 +80,11 @@ injected text in a review or a listing **cannot add, remove, or reorder a recomm
 
 ---
 
-## 🖼️ Screenshots
-
-<div align="center">
-
-### Landing Page
-![Landing](screenshots/landingpage.png)
-
-### Dashboard
-![Dashboard](screenshots/dash.png)
-
-### Search
-![Search](screenshots/search.png)
-
-</div>
-
-
----
-
 ## 🏗️ Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│           CLIENT · Next.js 15 / React 19 / Tailwind v4                │
+│           CLIENT · Next.js 16 / React 19 / Tailwind v4                │
 │   Marketing site · Dashboard/Discover · live SSE stream · Clerk auth  │
 │   BFF route handlers attach the session token server-side             │
 └───────────────────────────┬──────────────────────────────────────────┘
@@ -206,7 +188,7 @@ P2-Product-Recommendion-engine/            # uv workspace (monorepo)
 │   └── evaluation/    # aggregator eval + ranking eval (NDCG/MRR/Recall) · LLM judge · CI gates
 ├── apps/
 │   ├── api/           # FastAPI: /health /metrics /recommend /aggregate(+/stream) /chat(SSE)
-│   └── web/           # Next.js 15 · Clerk · dashboard/discover · live SSE stream · Tailwind
+│   └── web/           # Next.js 16 · Clerk · dashboard/discover · live SSE stream · Tailwind
 ├── infra/
 │   ├── compose/       # docker-compose.{data,app,observability}.yml + prometheus.yml
 │   │                  # (Langfuse lives inside observability.yml — there is no separate file)
@@ -239,7 +221,7 @@ P2-Product-Recommendion-engine/            # uv workspace (monorepo)
 | **Resilience** | Circuit breaker → popularity fallback · Redis degrade · LLM static-template fallback |
 | **Observability** | OpenTelemetry → Jaeger · **Langfuse** (LLM cost/latency) · Prometheus + Grafana · RedisInsight |
 | **Eval** | Ranking (NDCG@3 / MRR / Recall@3) + answer-quality (custom LLM judge) · **CI eval gate** |
-| **Frontend** | Next.js 15 · React 19 · TypeScript · Tailwind v4 · framer-motion · MapLibre-free · Clerk |
+| **Frontend** | Next.js 16 · React 19 · TypeScript · Tailwind v4 · framer-motion · Clerk |
 | **Deployment** | Docker (multi-stage, non-root) · Helm (kind → EKS) · Terraform · GitHub Actions |
 
 ---
@@ -623,14 +605,22 @@ Table: p2-recommender
 
 ## 📊 Results (real numbers, honest scope)
 
-| Metric | Result |
-|---|---|
-| **Ranking quality** | **NDCG@3 = 0.80 · MRR = 0.83 · Recall@3 = 0.82** (16-query attribute-labelled golden set) |
-| **Answer quality** | answer-relevancy **0.94** · context-precision **0.65** · **faithfulness 0.56** (weak metric — documented improvement target) |
-| **Reranker A/B** | bge cross-encoder **regressed** NDCG@3 (−0.02) / Recall@3 (−0.07) → **gated off** (measure, don't assume) |
+| Metric | Result | Reproduce |
+|---|---|---|
+| **Aggregator ranking** *(the shipped path)* | **NDCG@3 = 0.9413 · MRR = 1.0000** vs Google Shopping's own order at **0.8240 / 0.8750** — 4 recorded fixtures | `make eval-aggregator` — offline, no keys, **report committed** at [`reports/aggregator-eval.md`](reports/aggregator-eval.md) |
+| **Catalog ranking** | NDCG@3 = 0.80 · MRR = 0.83 · Recall@3 = 0.82 (16-query attribute-labelled golden set) | `make eval-ranking` — **needs a seeded Qdrant + `OPENAI_API_KEY`**, so the report is not committed |
+| **Answer quality** | answer-relevancy 0.94 · context-precision 0.65 · **faithfulness 0.56** (weak — improvement target, see [Roadmap](#-roadmap)) | `make eval-rag` — **needs LLM keys**, report not committed |
+| **Reranker A/B** | bge cross-encoder **regressed** NDCG@3 (−0.02) / Recall@3 (−0.07) → **gated off** (measure, don't assume) | part of `make eval-ranking`, same requirements |
 | **Tests** | **112** (103 offline + 9 integration-marked) · mypy **strict** clean · ruff clean |
-| **Cost** | LLM-dominated; Groq primary keeps per-query cheap; hard `max_tokens` cap + kill switch |
-| **Deploy** | Local Docker verified (API image builds + `/health` OK) · Helm chart structurally validated · Terraform **HCL syntax-valid** (not applied) |
+| **Dependency CVEs** | **0 unignored** — `pip-audit` + `npm audit --audit-level=high` block every PR. First run found 36 Python advisories in 11 packages (incl. `starlette` on the request path) and 3 npm high-severity groups (incl. Next.js SSRF); all cleared by upgrade. Six langchain advisories remain **enumerated by ID**, not suppressed by package — a *new* langchain CVE still fails the build. See [Roadmap](#-roadmap) |
+| **Cost** | Search-metered, not compute-bound: SerpApi free tier is 250/month and every cache miss spends one. Global day/month budget guard + 6h result cache. LLM cost capped by `MAX_OUTPUT_TOKENS` + kill switch | `SERPAPI_*` in `.env.example` |
+| **Deploy** | Local Docker verified (API image builds, `/health` OK) · Helm chart structurally validated · Terraform **HCL syntax-valid, never applied** | `make helm-lint`, `terraform validate` |
+
+> **Where these numbers come from.** Only the aggregator eval and the test/CVE counts are
+> reproducible from a bare clone — the rest need a seeded Qdrant and API keys, so their reports are
+> not committed and you are taking them on trust. That distinction is deliberate: the one number
+> this project actually gates CI on is the one you can verify yourself, offline, in seconds.
+> The 4-fixture aggregator set is a sanity check, not a benchmark, and the report says so itself.
 
 
 ---
@@ -639,7 +629,7 @@ Table: p2-recommender
 
 A clean local → cloud path:
 
-1. **Local Docker** — multi-stage **non-root** images (`api` / `web`) + the 4-layer compose mesh;
+1. **Local Docker** — multi-stage **non-root** images (`api` / `web`) + the 3-file compose mesh;
    `make up` brings up the whole stack; the API image builds and serves `/health`.
 2. **Helm** — a single chart (`ops/helm/p2-recommender`): api/web Deployments + Service + **HPA**,
    **Qdrant StatefulSet** + PVC, Redis, ServiceAccount (**IRSA** slot), optional ALB Ingress.
@@ -652,8 +642,10 @@ A clean local → cloud path:
    ```bash
    cd infra/terraform && terraform init && terraform validate && terraform plan   # no apply
    ```
-4. **CI/CD** — GitHub Actions: lint → mypy → tests (with Qdrant/Redis/DynamoDB service containers)
-   → frontend `tsc` + `next build` → **eval gate**. Runs on every push and PR; currently green.
+4. **CI/CD** — GitHub Actions, four jobs on every push and PR; currently green:
+   `quality` (ruff → mypy strict → offline tests → **eval gate**) · `frontend` (`tsc` +
+   `next build`) · `security` (**`pip-audit` + `npm audit`, both blocking**) · `integration`
+   (real Qdrant/Redis/DynamoDB service containers; key-gated tests auto-skip).
    The gate (`evaluation.aggregator.gate`) blocks a merge if NDCG@3/MRR regress past tolerance
    **or** if our ordering stops beating Google Shopping's own order. It reads recorded fixtures,
    so it needs no services, no keys, and spends no paid SerpApi quota. The static-catalog gate
@@ -668,10 +660,11 @@ Every step above is reproducible with the `make` targets and commands shown.
 
 ## 🗺️ Roadmap
 
-- 🔒 **Wire the eval gate into CI** — `make eval-gate` runs both gates locally; the aggregator gate
-  needs no services or keys, so it belongs as a required check on every PR
 - ☁️ **Actually apply the Terraform** — the HCL validates but has never been applied; a real EKS
-  deploy (and its bill) is the honest next milestone
+  deploy (and its bill) is the honest next milestone. This is the single biggest gap between this
+  repo and a production system, and it is stated here rather than papered over
+- 🧪 **End-to-end tests** — `tsc` and `next build` pass, but nothing exercises the SSE stream or the
+  Discover page at request time; a green build is not a green runtime
 - 🔐 **LangChain 0.3 → 1.x + Langfuse 2 → 3** — six open CVEs in the langchain family are fixed
   only in 1.x, but `langchain` is pinned `<0.4` because Langfuse 2.x hard-imports
   `langchain.callbacks.base`; bumping it blind trades a known CVE for silently-dead tracing. The
@@ -688,11 +681,12 @@ Every step above is reproducible with the `make` targets and commands shown.
 
 <div align="center">
 
-Built by **Zain Ul Abdin** — a **Full-Stack AI / GenAI Engineer** who builds production-grade AI
-systems **end to end**: not just the model, but the whole stack — RAG pipelines, agentic systems,
-fine-tuned LLMs, inference serving, containerized deployment, CI/CD, and the observability that keeps
-it healthy. **ProductIQ** is a projects that is
-deployable services — with tests, eval gates, security, observability, and infrastructure-as-code.
+Built by **Zain Ul Abdin** — a **Full-Stack AI / GenAI Engineer** who builds AI systems end to end:
+not just the model, but the retrieval, the ranking, the caching, the cost controls, and the
+evaluation that proves any of it works. **ProductIQ** is a demo build, not a commercial service —
+what it demonstrates is the engineering around an LLM feature: eval gates that can fail a build,
+a spend guard on a metered dependency, degradation paths that stay honest under failure, and a
+test suite and CVE scan that run on every push.
 
 </div>
 
@@ -707,7 +701,7 @@ deployable services — with tests, eval gates, security, observability, and inf
 `Python` · `FastAPI` · `LangChain / LangGraph` · `PyTorch` · `Hugging Face` ·
 `Qdrant / FAISS / Chroma / Pinecone` · `OpenAI / Claude / Groq / LLaMA / Mistral` ·
 `LoRA / QLoRA / SFT` · `Docker` · `Kubernetes` · `Helm` · `Terraform` ·
-`GitHub Actions / ArgoCD` · `Prometheus / Grafana / Langfuse` ·
+`GitHub Actions` · `Prometheus / Grafana / Langfuse` ·
 `AWS (EKS · DynamoDB · ECR · S3 · SageMaker)`
 
 
