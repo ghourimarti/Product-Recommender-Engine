@@ -142,16 +142,21 @@ P2-Product-Recommendion-engine/            # uv workspace (monorepo)
 │   │                  # embeddings · cache (4-layer) · history (DynamoDB) · auth · ratelimit
 │   │                  # security (PII/injection) · resilience (circuit breaker) · observability
 │   ├── retrieval/     # Qdrant hybrid store · semantic cache · reranker (A/B, gated off) · index
-│   ├── recommender/   # rating-aware ranking · recommend() · cached path · popularity fallback · chat
-│   └── evaluation/    # ranking eval (NDCG/MRR/Recall) · answer-quality (LLM judge) · golden sets
+│   ├── recommender/   # rating-aware ranking · offer ranking · aggregator · cached · fallback · chat
+│   ├── sources/       # SerpApi (Google Shopping) live offer source
+│   └── evaluation/    # aggregator eval + ranking eval (NDCG/MRR/Recall) · LLM judge · CI gates
 ├── apps/
-│   ├── api/           # FastAPI: /health /metrics /recommend /chat(SSE) · Dockerfile
+│   ├── api/           # FastAPI: /health /metrics /recommend /aggregate(+/stream) /chat(SSE)
 │   └── web/           # Next.js 15 · Clerk · dashboard/discover · live SSE stream · Tailwind
 ├── infra/
-│   ├── compose/       # docker-compose.{data,app,observability,langfuse}.yml + prometheus.yml
-│   ├── helm/p2-recommender/   # Helm chart (api/web + Qdrant StatefulSet/redis + HPA + ingress)
+│   ├── compose/       # docker-compose.{data,app,observability}.yml + prometheus.yml
+│   │                  # (Langfuse lives inside observability.yml — there is no separate file)
 │   └── terraform/     # VPC · EKS · DynamoDB · ElastiCache · S3 · ECR · IRSA (modular)
-├── data/products.json                     # 9 aggregated products (catalog of record)
+├── ops/
+│   ├── helm/p2-recommender/   # Helm chart (api/web + Qdrant StatefulSet/redis + HPA + ingress)
+│   ├── load/          # k6 load script + dev-token minting
+│   └── observability/ # Prometheus alerts + Grafana datasources/dashboards
+├── data/products.json                     # 9-product static catalog (the /recommend + /chat path)
 ├── Makefile · pyproject.toml · uv.lock · .env.example
 ```
 
@@ -209,8 +214,11 @@ make check                       # ruff lint + mypy (strict) + pytest   → the 
 ```bash
 make db                          # data tier: Qdrant + DynamoDB-local + Redis
 make seed                        # aggregate reviews → products, then embed + index into Qdrant
-make eval-ranking                # NDCG@3 / MRR / Recall@3 (+ reranker A/B)  → docs/eval-baseline.md
-make eval-rag                    # answer-quality (custom LLM judge)         → docs/answer-quality-baseline.md
+make eval-aggregator             # ranking eval for the SHIPPED /aggregate path (offline, 0 API cost)
+make eval-ranking                # NDCG@3 / MRR / Recall@3 (+ reranker A/B), static-catalog path
+make eval-rag                    # answer-quality (custom LLM judge)
+# All three print to stdout. Frozen baselines the CI gate compares against are tracked at
+# packages/evaluation/{aggregator,ranking}/baseline.json
 ```
 
 ### 4 · Run the full stack — **Docker (recommended)**
@@ -408,13 +416,18 @@ WEB_PORT=2012
 |---|---|---|---|
 | `GET` | `/health` | – | Service status |
 | `GET` | `/metrics` | – | Prometheus RED + cache-hit/miss + LLM cost metrics |
-| `POST` | `/recommend` | ✅ | Ranked recommendations (ranking-only, 4-layer cached) — fast |
+| `POST` | `/aggregate` | ✅ | **Live** shopping search (SerpApi) → rank → grounded reasons, cached 6h |
+| `POST` | `/aggregate/stream` | ✅ | **SSE**: `offers` (cards) → `final` (reasons) → `done` — the path the web UI uses |
+| `POST` | `/recommend` | ✅ | Static-catalog ranking (no LLM), 4-layer cached — fast |
 | `POST` | `/chat` | ✅ | **SSE** stream: `recommendations` → `token…` → `done` (grounded, per-user history) |
+| `DELETE` | `/history?session_id=` | ✅ | Clear one of the caller's chat sessions |
+| `DELETE` | `/account` | ✅ | **Right to be forgotten** — cascade-delete all of the caller's data |
+| `GET` | `/account/export` | ✅ | **DSAR** — export all of the caller's stored data |
 
-<sub>Auth is **fail-closed**: `/recommend` + `/chat` require a valid Bearer JWT (Clerk in prod, or a
-minted dev token locally). `/health` + `/metrics` stay open for probes/scrape. Per-user rate limit:
-**30/min + 500/day** → `429` with `Retry-After`. *(Right-to-be-forgotten cascade delete is designed
-— see [Roadmap](#-roadmap).)*</sub>
+<sub>Auth is **fail-closed**: every endpoint except `/health` + `/metrics` requires a valid Bearer
+JWT (Clerk in prod, or a minted dev token locally); `/health` + `/metrics` stay open for
+probes/scrape. Per-user rate limit: **30/min + 500/day** → `429` with `Retry-After`. Erasure
+(`DELETE /account`) and export (`GET /account/export`) are **implemented**, not planned.</sub>
 
 ### Example: `/recommend`
 ```json
@@ -515,7 +528,7 @@ Table: p2-recommender
 | **Ranking quality** | **NDCG@3 = 0.80 · MRR = 0.83 · Recall@3 = 0.82** (16-query attribute-labelled golden set) |
 | **Answer quality** | answer-relevancy **0.94** · context-precision **0.65** · **faithfulness 0.56** (weak metric — documented improvement target) |
 | **Reranker A/B** | bge cross-encoder **regressed** NDCG@3 (−0.02) / Recall@3 (−0.07) → **gated off** (measure, don't assume) |
-| **Tests** | **77** (unit + integration) · mypy **strict** clean · ruff clean |
+| **Tests** | **112** (103 offline + 9 integration-marked) · mypy **strict** clean · ruff clean |
 | **Cost** | LLM-dominated; Groq primary keeps per-query cheap; hard `max_tokens` cap + kill switch |
 | **Deploy** | Local Docker verified (API image builds + `/health` OK) · Helm chart structurally validated · Terraform **HCL syntax-valid** (not applied) |
 
@@ -528,11 +541,11 @@ A clean local → cloud path:
 
 1. **Local Docker** — multi-stage **non-root** images (`api` / `web`) + the 4-layer compose mesh;
    `make up` brings up the whole stack; the API image builds and serves `/health`.
-2. **Helm** — a single chart (`infra/helm/p2-recommender`): api/web Deployments + Service + **HPA**,
+2. **Helm** — a single chart (`ops/helm/p2-recommender`): api/web Deployments + Service + **HPA**,
    **Qdrant StatefulSet** + PVC, Redis, ServiceAccount (**IRSA** slot), optional ALB Ingress.
    ```bash
    make helm-lint                              # helm lint + kubeconform (needs helm)
-   helm install p2 infra/helm/p2-recommender -n p2 --create-namespace
+   helm install p2 ops/helm/p2-recommender -n p2 --create-namespace
    ```
 3. **Terraform** — modular **VPC · EKS · DynamoDB · ElastiCache · S3 · ECR · IRSA**; S3 remote-state
    backend stubbed.
@@ -540,8 +553,10 @@ A clean local → cloud path:
    cd infra/terraform && terraform init && terraform validate && terraform plan   # no apply
    ```
 4. **CI/CD** — GitHub Actions: lint → mypy → tests (with Qdrant/Redis/DynamoDB service containers)
-   → build → **eval gate (blocks ranking regression vs baseline)** → push ECR → ArgoCD/Argo-Rollouts
-   (OIDC → AWS, no long-lived keys).
+   → frontend `tsc` + `next build`. Runs on every push and PR; currently green.
+   **CD is a skeleton and has never been executed** (0 runs): tag-triggered, OIDC → AWS (no
+   long-lived keys) → build/push both images to ECR → `helm upgrade --install` against EKS.
+   There is no ArgoCD in this repo — the deploy step calls Helm directly.
 
 Every step above is reproducible with the `make` targets and commands shown.
 
@@ -549,7 +564,10 @@ Every step above is reproducible with the `make` targets and commands shown.
 
 ## 🗺️ Roadmap
 
-- 🧾 **Right-to-be-forgotten endpoint** — wire the designed DynamoDB cascade-delete to a `DELETE /me/data`
+- 🔒 **Wire the eval gate into CI** — `make eval-gate` runs both gates locally; the aggregator gate
+  needs no services or keys, so it belongs as a required check on every PR
+- ☁️ **Actually apply the Terraform** — the HCL validates but has never been applied; a real EKS
+  deploy (and its bill) is the honest next milestone
 - 📚 **Broaden the catalog** — multi-category data so Recall@k becomes a meaningful benchmark (beyond within-category audio)
 - 🎯 **Lift faithfulness (0.56)** — tighter grounding prompt + wider context window, proven against the eval gate
 - 🔁 **Re-open the reranker** — try title-level reranking (bass/neckband appear in titles) and re-A/B
