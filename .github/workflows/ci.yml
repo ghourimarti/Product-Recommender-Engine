@@ -60,6 +60,36 @@ jobs:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk
         run: node node_modules/next/dist/bin/next build
 
+  security:
+    # Dependency CVE scan for both runtimes. Deliberately BLOCKING rather than advisory:
+    # a scan whose failure is ignored is not a control, it is decoration.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      # Audit the resolved RUNTIME dependency set (--no-dev): a CVE in a lint-only tool is
+      # not something an attacker can reach in production.
+      - name: Export runtime dependencies
+        run: uv export --no-dev --no-emit-project --format requirements-txt -o requirements-audit.txt
+
+      - name: Audit Python dependencies
+        run: uvx pip-audit -r requirements-audit.txt --progress-spinner off
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      # `npm audit` reports transitive dev-tooling advisories that no deployed artifact ships;
+      # gating at `high` keeps this a signal rather than permanent noise.
+      - name: Audit npm dependencies
+        working-directory: apps/web
+        run: npm audit --audit-level=high
+
   integration:
     # Real local services via GitHub service containers. Tests that also need API keys
     # (LLM / SerpApi) auto-skip unless the secrets are configured — so this never spends
