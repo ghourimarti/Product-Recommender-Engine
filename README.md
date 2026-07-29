@@ -553,7 +553,11 @@ A clean local → cloud path:
    cd infra/terraform && terraform init && terraform validate && terraform plan   # no apply
    ```
 4. **CI/CD** — GitHub Actions: lint → mypy → tests (with Qdrant/Redis/DynamoDB service containers)
-   → frontend `tsc` + `next build`. Runs on every push and PR; currently green.
+   → frontend `tsc` + `next build` → **eval gate**. Runs on every push and PR; currently green.
+   The gate (`evaluation.aggregator.gate`) blocks a merge if NDCG@3/MRR regress past tolerance
+   **or** if our ordering stops beating Google Shopping's own order. It reads recorded fixtures,
+   so it needs no services, no keys, and spends no paid SerpApi quota. The static-catalog gate
+   needs a seeded Qdrant + `OPENAI_API_KEY`, so it stays local (`make eval-gate`).
    **CD is a skeleton and has never been executed** (0 runs): tag-triggered, OIDC → AWS (no
    long-lived keys) → build/push both images to ECR → `helm upgrade --install` against EKS.
    There is no ArgoCD in this repo — the deploy step calls Helm directly.
