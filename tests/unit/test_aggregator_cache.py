@@ -101,3 +101,53 @@ def test_global_budget_guard_blocks_spend(monkeypatch: Any) -> None:
     assert third.source_unavailable is True
     assert third.no_match is False
     assert "budget" in third.detail.lower()
+
+
+def test_budget_claim_is_atomic_not_check_then_act(monkeypatch: Any) -> None:
+    """Concurrent cache misses must not all pass the same under-budget check.
+
+    The guard used to read the counters, decide, and only increment after the search returned.
+    In that window N simultaneous misses all saw the same count, all passed, and all spent --
+    overshooting a metered, paid cap by N-1. Claiming the slot with an atomic INCR *before*
+    searching means only `cap` callers can ever be granted, no matter how many ask at once.
+
+    Under the old check-then-act code every one of these calls returned "" (nothing incremented
+    without a search), so this test fails there and passes now.
+    """
+    from core.config import Settings
+    from recommender import aggregator
+
+    monkeypatch.setattr(
+        aggregator,
+        "get_settings",
+        lambda: Settings(serpapi_daily_budget=3, serpapi_monthly_budget=250),
+    )
+    cache = RedisCache(fakeredis.FakeRedis(decode_responses=True))
+
+    # Ten callers all claim before any of them spends -- i.e. the concurrent-miss case.
+    outcomes = [aggregator.reserve_search_budget(cache) for _ in range(10)]
+
+    granted = [o for o in outcomes if o == ""]
+    refused = [o for o in outcomes if o != ""]
+    assert len(granted) == 3, "budget must grant exactly the cap, never more"
+    assert len(refused) == 7
+    assert all("daily search budget reached" in r for r in refused)
+
+
+def test_released_claim_is_reusable(monkeypatch: Any) -> None:
+    """A search that never went out must not permanently consume budget."""
+    from core.config import Settings
+    from recommender import aggregator
+
+    monkeypatch.setattr(
+        aggregator,
+        "get_settings",
+        lambda: Settings(serpapi_daily_budget=1, serpapi_monthly_budget=250),
+    )
+    cache = RedisCache(fakeredis.FakeRedis(decode_responses=True))
+
+    assert aggregator.reserve_search_budget(cache) == ""
+    assert aggregator.reserve_search_budget(cache) != ""  # cap reached
+
+    aggregator.release_search_budget(cache)  # the first search failed before going out
+    assert aggregator.reserve_search_budget(cache) == ""  # the slot is available again
