@@ -12,12 +12,12 @@ type Metric = { value: number; prefix?: string; suffix?: string; decimals?: numb
      7.6ms  — p95 of a cached /recommend under k6 at 50 VUs
      66%    — observed cache hit rate (target >= 60%)
      3      — Groq -> OpenAI -> Anthropic, automatic failover (verified by killing the primary)
-     107    — automated tests, green in CI                                                     */
+     112    — automated tests collected by pytest (103 offline + 9 integration), green in CI   */
 const METRICS: Metric[] = [
   { value: 7.6,   suffix: "ms", label: "p95 cached response", decimals: 1 },
   { value: 66,    suffix: "%",  label: "Cache hit rate (repeat queries are free)" },
   { value: 3,     suffix: "",   label: "LLM providers, automatic failover" },
-  { value: 107,   suffix: "",   label: "Automated tests in CI" },
+  { value: 112,   suffix: "",   label: "Automated tests in CI" },
 ];
 
 function useCountUp(target: number, decimals = 0, run = false) {
