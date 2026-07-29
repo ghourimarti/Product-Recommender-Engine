@@ -49,7 +49,19 @@ REQUESTS = Counter("http_requests_total", "Total HTTP requests", ["method", "pat
 LATENCY = Histogram("http_request_duration_seconds", "Request latency (s)", ["path"])
 
 # Characters of generated text held back before release, so a system-prompt leak is caught by the
-# output guardrail before any of it reaches the client (leaked fragments are far shorter than this).
+# output guardrail before any of it reaches the client.
+#
+# The soundness floor is derived in core.security (MIN_GUARD_HOLDBACK = longest leak fragment - 1,
+# currently 31); anything at or above it makes it impossible for the start of a leak to be
+# released before the leak completes and is detected. 200 is chosen well above that floor so the
+# guarantee survives someone adding a longer fragment, and so a paraphrased leak that only trips
+# the regex late still has room. test_security asserts GUARD_HOLDBACK >= MIN_GUARD_HOLDBACK, so
+# the invariant fails in CI rather than silently in production.
+#
+# Cost of the margin: the last 200 characters of every answer arrive in one chunk at the end
+# instead of streaming. Explanations are capped at MAX_OUTPUT_TOKENS (600), so this trades the
+# tail of the response for the guarantee -- deliberately, because a partially-streamed system
+# prompt cannot be recalled once it is on the client.
 GUARD_HOLDBACK = 200
 
 
