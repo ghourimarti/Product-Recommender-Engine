@@ -113,6 +113,12 @@ def aggregate_metrics(rows: list[EvalRow]) -> dict[str, float]:
         "ndcg_at_3": _mean([r.ours_ndcg_at_3 for r in rows]),
         "mrr": _mean([r.ours_mrr for r in rows]),
         "recall_at_3": _mean([r.ours_recall_at_3 for r in rows]),
+        # Structural ceiling for Recall@3, computed rather than assumed. Three result slots
+        # cannot hold more than three of the n_good relevant offers, so recall is bounded by
+        # min(3, n_good)/n_good. With 22-30 "good" offers per query that bound sits near 0.11 --
+        # meaning the raw Recall@3 reads like a failure when it is in fact near-optimal. Report
+        # the bound next to the value so the number cannot be misread (by a reviewer or by us).
+        "recall_at_3_ceiling": _mean([min(3, r.n_good) / r.n_good for r in rows]),
     }
 
 
@@ -134,7 +140,12 @@ def build_report(rows: list[EvalRow], metrics: dict[str, float]) -> str:
         f"| **Ours (rating × volume blend)** | **{metrics['ndcg_at_3']}** | **{metrics['mrr']}** |",
         f"| **Lift** | **{lift_ndcg:+.4f}** | **{lift_mrr:+.4f}** |",
         "",
-        f"Recall@3 (ours): {metrics['recall_at_3']}",
+        f"Recall@3 (ours): **{metrics['recall_at_3']}** — against a structural ceiling of "
+        f"**{metrics['recall_at_3_ceiling']:.4f}**. Three slots cannot hold more than three of "
+        f"the {min(r.n_good for r in rows)}-{max(r.n_good for r in rows)} offers per query that "
+        "clear the 'good' bar, so Recall@3 is capped near that ceiling *by construction*. It is "
+        "reported for completeness and is **not** a quality signal at this k — NDCG@3 and MRR are "
+        "the metrics that discriminate here.",
         "",
         "## Per query",
         "",

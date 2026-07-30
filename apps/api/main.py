@@ -152,7 +152,7 @@ def require_user(authorization: str | None = Header(default=None)) -> str:
 
 
 def rate_limited_user(user_id: str = Depends(require_user)) -> str:
-    """Authenticated user id, after enforcing the per-user rate limit (Decisions 9, 20)."""
+    """Authenticated user id, after enforcing the per-user rate limit."""
     try:
         _rate_limiter().check(user_id)
     except RateLimitExceeded as exc:

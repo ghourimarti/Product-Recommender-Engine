@@ -5,19 +5,30 @@ import { Container, SectionHeading } from "./primitives";
 
 type Metric = { value: number; prefix?: string; suffix?: string; decimals?: number; label: string };
 
-/* Every number here must be one we have actually measured and can reproduce on demand.
-   The previous set ("10,000+ products", "500k+ reviews", "98.9% uptime") was fabricated:
-   the catalog is 9 seed products plus live Google-Shopping offers, and uptime has never been
-   measured (there is no SLO monitor). Those claims are gone. What replaces them is real:
-     7.6ms  — p95 of a cached /recommend under k6 at 50 VUs
-     66%    — observed cache hit rate (target >= 60%)
-     3      — Groq -> OpenAI -> Anthropic, automatic failover (verified by killing the primary)
-     112    — automated tests collected by pytest (103 offline + 9 integration), green in CI   */
+/* Every number here must be verifiable by a reader who has only this repository.
+   That bar has now cost two rounds of claims:
+
+   1. Fabricated — "10,000+ products", "500k+ reviews", "98.9% uptime". The catalog is 9 seed
+      products plus live Google-Shopping offers, and uptime has never been measured (no SLO
+      monitor exists). Removed.
+   2. Measured but unevidenced — "7.6ms p95 cached" and "66% cache hit rate". Both came from a
+      real local k6 run, but no result artifact was ever committed, so a visitor could not check
+      either one. Under a heading that promises reproducibility that is the same failure as (1),
+      just smaller, so they are removed too rather than quietly kept.
+
+   What replaces them is true by inspection of committed files:
+     117  — `uv run pytest --collect-only -q`  (108 offline + 9 integration)
+     0    — unignored advisories; pip-audit + npm audit BLOCK every PR (.github/workflows/ci.yml)
+     3    — Groq -> OpenAI -> Anthropic fallback chain (packages/core/llm.py)
+     6h   — AGGREGATE_TTL_SECONDS (packages/recommender/aggregator.py)
+
+   Keep the test count in sync with the collect command. A stale number here is worse than no
+   number, because the repro command sits one line away in the same section. */
 const METRICS: Metric[] = [
-  { value: 7.6,   suffix: "ms", label: "p95 cached response", decimals: 1 },
-  { value: 66,    suffix: "%",  label: "Cache hit rate (repeat queries are free)" },
+  { value: 117,   suffix: "",   label: "Automated tests in CI" },
+  { value: 0,     suffix: "",   label: "Unignored dependency CVEs (scan blocks every PR)" },
   { value: 3,     suffix: "",   label: "LLM providers, automatic failover" },
-  { value: 112,   suffix: "",   label: "Automated tests in CI" },
+  { value: 6,     suffix: "h",  label: "Result cache — a repeat query is free" },
 ];
 
 function useCountUp(target: number, decimals = 0, run = false) {

@@ -34,13 +34,14 @@ const EVIDENCE = [
   },
   {
     icon: Gauge,
-    stat: "66%",
-    statLabel: "cache hit rate on repeat queries",
+    stat: "6h",
+    statLabel: "result cache window",
     headline: "A repeat question costs nothing",
     detail:
-      "Results are cached for 6 hours, so a repeated query spends zero paid searches and zero LLM " +
-      "calls. Measured p95 on a cached response is 7.6ms under k6 at 50 virtual users.",
-    repro: "ops/load/k6-recommend.js",
+      "Results are cached for six hours, so a repeated query spends zero paid searches and zero " +
+      "LLM calls. The window itself is the cost control: every expiry costs a real metered " +
+      "search, which is why it is six hours and not ten minutes.",
+    repro: "packages/recommender/aggregator.py",
   },
   {
     icon: Wallet,
@@ -55,7 +56,7 @@ const EVIDENCE = [
   },
   {
     icon: ShieldCheck,
-    stat: "112",
+    stat: "117",
     statLabel: "automated tests, green in CI",
     headline: "An outage is never dressed up as an empty result",
     detail:

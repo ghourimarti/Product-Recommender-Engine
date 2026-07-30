@@ -3,7 +3,7 @@
 Search (the live SerpApi call) is injected by the caller (API) so this stays testable offline
 and search-free.
 
-**Cost + honesty controls (Decisions 20, 21).** SerpApi is *metered* (free plan = 250 searches a
+**Cost + honesty controls.** SerpApi is *metered* (free plan = 250 searches a
 month), which makes it the binding constraint on the whole product — not compute. Two rules
 follow, and they were both violated before:
 

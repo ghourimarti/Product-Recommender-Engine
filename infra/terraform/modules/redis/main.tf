@@ -26,7 +26,7 @@ resource "aws_security_group" "redis" {
   tags   = var.tags
 }
 
-# Multi-AZ Redis (Decisions 10/23): cache + queue broker, replicas across AZs.
+# Multi-AZ Redis: cache + queue broker, replicas across AZs.
 resource "aws_elasticache_replication_group" "this" {
   replication_group_id       = "${var.name}-redis"
   description                = "Redis for ${var.name}"

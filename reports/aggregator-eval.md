@@ -12,7 +12,7 @@
 | **Ours (rating × volume blend)** | **0.9413** | **1.0** |
 | **Lift** | **+0.1173** | **+0.1250** |
 
-Recall@3 (ours): 0.1034
+Recall@3 (ours): **0.1034** — against a structural ceiling of **0.1147**. Three slots cannot hold more than three of the 22-30 offers per query that clear the 'good' bar, so Recall@3 is capped near that ceiling *by construction*. It is reported for completeness and is **not** a quality signal at this k — NDCG@3 and MRR are the metrics that discriminate here.
 
 ## Per query
 

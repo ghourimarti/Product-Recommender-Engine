@@ -11,14 +11,19 @@ const VALUES = [
   { icon: Globe,   title: "Built to scale", desc: "The same architecture serving a demo scales to millions of queries — statelessly." },
 ];
 
-/* Only measured, reproducible numbers. The previous set
-   ("10,000+ products", "500k+ reviews", "12,000+ active shoppers", "98.9% uptime") was invented:
-   there are zero real users and uptime has never been measured. */
+/* Only numbers verifiable from the repository itself. Two earlier rounds of cuts:
+   1. Invented ("10,000+ products", "500k+ reviews", "12,000+ active shoppers", "98.9% uptime") —
+      zero real users, and uptime has never been measured.
+   2. Measured locally but never evidenced ("7.6ms p95", "66% cache hit rate") — real numbers from
+      a k6 run, but no artifact was committed, so no reader could confirm them. Also gone.
+   What remains is true by inspection: the test count from `pytest --collect-only`, the blocking
+   CVE scan in .github/workflows/ci.yml, the fallback chain in packages/core/llm.py, and
+   AGGREGATE_TTL_SECONDS in packages/recommender/aggregator.py. */
 const STATS = [
-  { value: "7.6ms",  label: "p95 cached response" },
-  { value: "66%",    label: "Cache hit rate" },
-  { value: "3",      label: "LLM providers, auto-failover" },
-  { value: "107",    label: "Automated tests in CI" },
+  { value: "117",  label: "Automated tests in CI" },
+  { value: "0",    label: "Unignored dependency CVEs" },
+  { value: "3",    label: "LLM providers, auto-failover" },
+  { value: "6h",   label: "Result cache — repeats are free" },
 ];
 
 export default function AboutPage() {

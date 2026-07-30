@@ -65,8 +65,13 @@ export const FLAT_LINKS: NavLeaf[] = [
 ];
 
 /* ── Metric badges (used in navbar CTA + homepage) ────────────────────────── */
-/* Measured only. "98.9% uptime" was fabricated — there is no uptime monitor. */
+/* Only numbers a reader can verify from this repository.
+   "98.9% uptime" was fabricated — there is no uptime monitor.
+   "7.6ms p95" and "66% cache hit rate" were measured locally but no artifact was ever committed,
+   so a visitor had no way to check them. Unverifiable numbers under a "measured, not claimed"
+   banner are the same defect as invented ones, just smaller — so they are gone too. Replaced with
+   values that are true by inspection of the committed code and CI config. */
 export const HEADLINE_METRICS = [
-  { icon: Zap,       value: "7.6ms", label: "p95 cached" },
-  { icon: BarChart3, value: "66%",   label: "cache hit rate" },
+  { icon: BarChart3, value: "117", label: "tests in CI" },
+  { icon: Zap,       value: "6h",  label: "result cache" },
 ];

@@ -1,4 +1,9 @@
-"""Per-user rate limiting + daily quota (Decisions 9, 20) via Redis fixed-window counters."""
+"""Per-user rate limiting + daily quota via Redis fixed-window counters.
+
+Note the limits are *per user*, which deliberately does not protect a shared, metered resource:
+one user inside their own quota can still drain a global budget. That gap is why the aggregator
+keeps a separate global spend guard (see ``recommender.aggregator.reserve_search_budget``).
+"""
 
 from __future__ import annotations
 

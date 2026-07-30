@@ -337,9 +337,10 @@ curl -N -X POST localhost:2011/chat -H "Authorization: Bearer $TOKEN" \
 
 ## 🧰 Make Commands
 
-Everything is driven by the `Makefile`. The containerised stack is **four compose files under one
-Docker project** (`p2-recommender`), so the tiers share one network and can be started
-independently. All targets read host ports + secrets from `.env` (`--env-file .env`).
+Everything is driven by the `Makefile`. The containerised stack is **three compose files under one
+Docker project** (`p2-recommender`) — `data`, `app`, `observability` — so the tiers share one
+network and can be started independently. (`make langfuse` is a fourth *tier* but not a fourth
+file: Langfuse's services live inside `docker-compose.observability.yml`.) All targets read host ports + secrets from `.env` (`--env-file .env`).
 
 ### Stack lifecycle (Docker)
 
@@ -611,7 +612,7 @@ Table: p2-recommender
 | **Catalog ranking** | NDCG@3 = 0.80 · MRR = 0.83 · Recall@3 = 0.82 (16-query attribute-labelled golden set) | `make eval-ranking` — **needs a seeded Qdrant + `OPENAI_API_KEY`**, so the report is not committed |
 | **Answer quality** | answer-relevancy 0.94 · context-precision 0.65 · **faithfulness 0.56** (weak — improvement target, see [Roadmap](#-roadmap)) | `make eval-rag` — **needs LLM keys**, report not committed |
 | **Reranker A/B** | bge cross-encoder **regressed** NDCG@3 (−0.02) / Recall@3 (−0.07) → **gated off** (measure, don't assume) | part of `make eval-ranking`, same requirements |
-| **Tests** | **112** (103 offline + 9 integration-marked) · mypy **strict** clean · ruff clean |
+| **Tests** | **117** (108 offline + 9 integration-marked) · mypy **strict** clean · ruff clean | `uv run pytest --collect-only -q` |
 | **Dependency CVEs** | **0 unignored** — `pip-audit` + `npm audit --audit-level=high` block every PR. First run found 36 Python advisories in 11 packages (incl. `starlette` on the request path) and 3 npm high-severity groups (incl. Next.js SSRF); all cleared by upgrade. Six langchain advisories remain **enumerated by ID**, not suppressed by package — a *new* langchain CVE still fails the build. See [Roadmap](#-roadmap) |
 | **Cost** | Search-metered, not compute-bound: SerpApi free tier is 250/month and every cache miss spends one. Global day/month budget guard + 6h result cache. LLM cost capped by `MAX_OUTPUT_TOKENS` + kill switch | `SERPAPI_*` in `.env.example` |
 | **Deploy** | Local Docker verified (API image builds, `/health` OK) · Helm chart structurally validated · Terraform **HCL syntax-valid, never applied** | `make helm-lint`, `terraform validate` |
