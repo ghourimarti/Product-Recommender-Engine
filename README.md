@@ -706,11 +706,3 @@ test suite and CVE scan that run on every push.
 
 
 ---
-
-<div align="center">
-
-**Built with ❤️ by Zain Ul Abdin**
-
-⭐ If this project helped or inspired you, a star means a lot!
-
-</div>
