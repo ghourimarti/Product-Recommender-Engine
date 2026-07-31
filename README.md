@@ -46,11 +46,6 @@ ranker, cache, guardrails, and eval methodology sit behind both of these:
 | **Binding constraint** | embedding cost at index time | **metered search quota** (250/month free) → global budget guard |
 | **Wired to the web UI?** | **No** — API + tests only | **Yes** — the dashboard's Discover page calls this |
 
-> **Honest scope.** Only **[B]** is wired to the frontend today. **[A]** is fully implemented,
-> tested, and independently eval-gated, but you reach it through the API rather than the UI. The
-> catalog is 9 products — enough to prove the retrieval and ranking behaviour, far too small to be
-> a relevance benchmark, which is why Recall@k on it is not a number worth quoting at you.
-
 **What both backends share:** a ranking blend of
 `semantic/positional relevance × average rating × review-volume confidence` — so a 5★-from-2-reviews
 product can't outrank a 4.5★-from-500 — and an LLM that writes **only the reasons**, never the
@@ -229,8 +224,9 @@ P2-Product-Recommendion-engine/            # uv workspace (monorepo)
 ## 🚀 Quick Start
 
 > The repo is **driven by a `Makefile`** (`make help`-style targets below). It wraps a **4-layer
-> docker-compose** stack under one project. All host ports live in `.env` (a `2001–2012` scheme so
-> the whole stack fits on one machine).
+> docker-compose** stack under one project. All host ports live in `.env` (a `2001–2018` scheme so
+> the whole stack fits on one machine). `2013–2018` back the Langfuse infra (Postgres/ClickHouse/
+> Redis/MinIO) — published so pgAdmin/DBeaver/psql/MinIO-console work directly on the host.
 
 ### Prerequisites
 - **Python 3.12** and [`uv`](https://docs.astral.sh/uv/) (uv provisions 3.12 for you)
@@ -273,13 +269,14 @@ make eval-rag                    # answer-quality (custom LLM judge)
 
 **Fastest path — one command, from empty to fully seeded:**
 ```bash
-make upv          # FROM ZERO: wipe volumes → build → start ALL 15 services → seed catalog
+make upv          # FROM ZERO: wipe volumes → build → start ALL 16 services → seed catalog
 make urls         # print every UI URL (ports read from .env)
 ```
 > `upv` is the cold-boot button: it wipes named volumes, brings up the data tier and waits for
 > health, seeds the catalog into Qdrant (needs `OPENAI_API_KEY`), then builds + starts the app and
 > observability/Langfuse tiers. Expect **~5–8 min** on a cold machine (Langfuse migrations continue
-> ~30–90 s in the background after it returns).
+> ~30–90 s in the background after it returns). After boot, `make up` polls `/health` and prints a
+> formatted service-directory banner with every URL + login (same content as `make urls`).
 
 **Or bring it up tier by tier** (start small, layer up — all tiers share one Docker project):
 ```bash
@@ -292,20 +289,29 @@ make urls         # print every UI URL
 
 📋 **Full command reference is in [Make Commands](#-make-commands) below.**
 
-**Service map** (host ports from `.env`):
+**Service map** (host ports from `.env`; the same block prints on-terminal after `make up`):
 
-| Service | URL |
+| Service | URL / connection |
 |---|---|
 | 🖥 **Web** (Next.js) | http://localhost:2012 |
-| 📡 **API** | http://localhost:2011 · docs http://localhost:2011/docs |
-| 🔎 Qdrant dashboard | http://localhost:2001/dashboard |
-| 🗄 DynamoDB-local | `localhost:2003` |
-| 🧱 Redis | `localhost:2004` |
-| 🧰 RedisInsight | http://localhost:2005 |
-| 🕸 Jaeger (traces) | http://localhost:2006 |
-| 🎭 Langfuse (LLM traces) | http://localhost:2008 |
-| 📈 Prometheus | http://localhost:2009 |
-| 📊 Grafana | http://localhost:2010 |
+| 📡 **API** | http://localhost:2011 · docs http://localhost:2011/docs · `/metrics` for Prometheus |
+| 🔎 Qdrant dashboard | http://localhost:2001/dashboard · gRPC on `2002` |
+| 🗄 DynamoDB-local | `localhost:2003` (no UI; table auto-created on first API call) |
+| 🧱 Redis (app cache) | `localhost:2004` (no password) |
+| 🧰 RedisInsight | http://localhost:2005 — **both `p2-redis` + `p2-langfuse-redis` pre-registered** on first boot |
+| 🕸 Jaeger (traces) | http://localhost:2006 · OTLP gRPC on `2007` |
+| 🎭 Langfuse (LLM traces) | http://localhost:2008 (login from `LANGFUSE_INIT_USER_*` in `.env`) |
+| 📈 Prometheus | http://localhost:2009 · Status → Targets |
+| 📊 Grafana | http://localhost:2010 (`admin/admin`) — **Prometheus DS + P2 overview dashboard pre-provisioned** |
+| 🐘 Langfuse Postgres | `localhost:2013` · db=`langfuse` user=`langfuse` pw=`LANGFUSE_POSTGRES_PASSWORD` — for pgAdmin/DBeaver/psql |
+| 🗃 Langfuse ClickHouse | http://localhost:2014 (HTTP) · `localhost:2015` (native) |
+| 🧵 Langfuse Redis (queue) | `localhost:2016` · password=`LANGFUSE_REDIS_AUTH` |
+| 🪣 Langfuse MinIO | http://localhost:2018 (web console, `minio/LANGFUSE_MINIO_ROOT_PASSWORD`) · S3 API on `2017` |
+
+> Everything past row 5 is **wired for you on first boot**: a `redisinsight-init` sidecar POSTs both
+> Redis DBs into RedisInsight via its API (idempotent — skips if the persisted volume already has
+> DBs), and Grafana's Prometheus datasource + `P2 Recommender — Overview` dashboard are provisioned
+> from `ops/observability/grafana/{datasources.yml,dashboards.yml,json/}`.
 
 ### 4-alt · Native dev — **fast loop**
 ```bash
@@ -348,14 +354,15 @@ file: Langfuse's services live inside `docker-compose.observability.yml`.) All t
 |---|---|
 | `make db` | **Tier 1 — data stores.** Qdrant + DynamoDB-local + Redis (nothing else needed to develop against). |
 | `make app` | **Tier 2 — the app.** Builds + starts API + web on top of the data tier (`data + app`). |
-| `make obs` | **Tier 3 — observability.** Jaeger + Prometheus + Grafana + RedisInsight + Langfuse (10 svc). |
+| `make obs` | **Tier 3 — observability.** Jaeger + Prometheus + Grafana + RedisInsight (+ preseed sidecar) + Langfuse (11 svc, incl. one-shot `redisinsight-init`). |
 | `make langfuse` | **Langfuse only** (web/worker/postgres/clickhouse/redis/minio) — for isolated LLM-trace debugging. |
-| `make full` / `make up` | **Everything** — data + app + observability + Langfuse (15 services), built + started. |
+| `make full` / `make up` | **Everything** — data + app + observability + Langfuse (**16 services**, incl. one-shot `redisinsight-init`), built + started + `wait-api` + URL banner. |
 | `make upv` | **FROM ZERO** — wipe volumes → build → start all tiers → **seed catalog**. The cold-boot button (~5–8 min). |
 | `make bootstrap` | App tier up + catalog indexed + URLs printed (no observability). |
+| `make wait-api` | Poll `/health` up to 60 s. Called automatically by `full`/`upv`/`bootstrap` after boot. |
 | `make ps` | Status of every container in the stack. |
 | `make logs` | Tail logs for the whole stack (Ctrl-C to stop). |
-| `make urls` | Print every host-side UI URL (ports sourced from `.env`). |
+| `make urls` | Print the formatted service-directory (URLs + logins + ports — same block that renders after `make up`). |
 
 ### Shutdown & erase
 
@@ -418,7 +425,8 @@ make check               # lint + types + tests (the green gate)
 ## 📋 Environment Variables
 
 Copy `.env.example` → `.env`. (Full annotated list is in `.env.example`; host ports default to a
-`2001–2012` scheme.)
+`2001–2018` scheme. `2013–2018` back the Langfuse infra — Postgres/ClickHouse/Redis/MinIO — and
+are published so pgAdmin/DBeaver/psql/MinIO-console/redis-cli work directly on the host.)
 
 **Two keys matter, and which one depends on which backend you want:**
 
@@ -465,6 +473,19 @@ OTEL_EXPORTER_OTLP_ENDPOINT=   # e.g. http://localhost:4317 (compose sets it in-
 LANGFUSE_PUBLIC_KEY=
 LANGFUSE_SECRET_KEY=
 LANGFUSE_HOST=
+
+# ── Langfuse internal infra (for pgAdmin / DBeaver / MinIO console) ──
+LANGFUSE_POSTGRES_USER=langfuse            # pgAdmin login
+LANGFUSE_POSTGRES_DB=langfuse              # pgAdmin database
+LANGFUSE_POSTGRES_PASSWORD=langfuse-local-dev
+LANGFUSE_POSTGRES_PORT=2013                # host → container 5432
+LANGFUSE_CLICKHOUSE_HTTP_PORT=2014         # host → container 8123
+LANGFUSE_CLICKHOUSE_NATIVE_PORT=2015       # host → container 9000
+LANGFUSE_REDIS_PORT=2016                   # host → container 6379
+LANGFUSE_REDIS_AUTH=langfuse-local-dev
+LANGFUSE_MINIO_API_PORT=2017               # host → container 9000 (S3)
+LANGFUSE_MINIO_CONSOLE_PORT=2018           # host → container 9001 (web console)
+LANGFUSE_MINIO_ROOT_PASSWORD=langfuse-local-dev
 
 # ── App / ports ──
 APP_ENV=local
