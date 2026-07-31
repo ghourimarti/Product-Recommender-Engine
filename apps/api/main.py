@@ -225,7 +225,9 @@ def aggregate_endpoint(
     """Live shopping aggregator: SerpApi search -> rank -> grounded reasons (cached)."""
     query = clean_user_text(req.query)
     logger.info("aggregate user=%s query=%s", user_id, redact_pii(req.query))
-    return aggregate(query, _cache(), _model(), k=req.k, callbacks=list(_callbacks()))
+    return aggregate(
+        query, _cache(), _model(), k=req.k, callbacks=list(_callbacks()), embeddings=_embeddings()
+    )
 
 
 @app.post("/aggregate/stream")
@@ -243,7 +245,12 @@ async def aggregate_stream_endpoint(
 
     async def event_stream() -> AsyncIterator[str]:
         for stage, result in aggregate_stream(
-            query, _cache(), _model(), k=req.k, callbacks=list(_callbacks())
+            query,
+            _cache(),
+            _model(),
+            k=req.k,
+            callbacks=list(_callbacks()),
+            embeddings=_embeddings(),
         ):
             yield _sse(stage, result.model_dump())
         yield _sse("done", {})

@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     # irrelevant products. Measured on this catalog: on-topic 0.47-0.55, off-topic 0.04-0.17.
     min_semantic_similarity: float = 0.30
 
+    # Same "no good match" idea for the live aggregator: Google returns *something* for any
+    # string, so gibberish yields confident-but-irrelevant offers. Reject when the best offer is
+    # semantically unrelated to the query. Measured on real offers: valid queries 0.31-0.51,
+    # gibberish 0.18-0.19 -> 0.25 separates them. 0 disables the gate.
+    min_aggregate_similarity: float = 0.25
+
     # Primary DB: DynamoDB. Local uses DynamoDB-local + dummy creds.
     aws_region: str = "us-east-1"
     aws_access_key_id: str = ""

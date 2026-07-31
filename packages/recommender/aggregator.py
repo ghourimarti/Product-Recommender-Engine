@@ -19,6 +19,7 @@ follow, and they were both violated before:
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import Any
@@ -36,6 +37,7 @@ from core.cache import (
 from core.config import get_settings
 from core.llm import explain_offers
 from core.models import AggregatorResult, ExplanationSet, Offer, RankedOffer
+from recommender.cached import NO_MATCH  # reuse the no_match_total counter (dashboard panel)
 from recommender.offer_ranking import rank_offers
 from recommender.ranking import RankingConfig
 from sources.serpapi_source import search_offers
@@ -120,6 +122,20 @@ def _degraded(query: str, reason: str, detail: str) -> AggregatorResult:
     )
 
 
+def _cosine(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(y * y for y in b))
+    return dot / (norm_a * norm_b) if norm_a and norm_b else 0.0
+
+
+def offers_relevance(query: str, offers: list[Offer], embeddings: Any) -> float:
+    """Best cosine similarity between the query and any offer title (semantic no-match signal)."""
+    vectors = embeddings.embed_documents([query, *(o.title for o in offers)])
+    query_vector = vectors[0]
+    return max((_cosine(query_vector, v) for v in vectors[1:]), default=0.0)
+
+
 def merge_offer_reasons(
     offers: list[RankedOffer], explanations: ExplanationSet
 ) -> list[RankedOffer]:
@@ -162,6 +178,7 @@ def aggregate_stream(
     config: RankingConfig | None = None,
     callbacks: list[Any] | None = None,
     search_fn: Callable[[str, int], list[Offer]] | None = None,
+    embeddings: Any | None = None,
 ) -> Iterator[tuple[str, AggregatorResult]]:
     """Staged aggregation, so the UI can show CARDS before the LLM has written its reasons.
 
@@ -219,6 +236,24 @@ def aggregate_stream(
 
     SEARCH_SPEND.inc()  # a live search actually went out and was served
 
+    # No-match gate. Google returns *something* for any string, so gibberish yields
+    # confident-but-irrelevant offers. Reject when the best offer is semantically unrelated to the
+    # query (mirrors the /recommend floor). Fail-open: an embedding error skips the gate, never
+    # breaks the flow. The no_match is cached so repeat gibberish costs 0 further searches.
+    if embeddings is not None and offers:
+        try:
+            relevance = offers_relevance(query, offers, embeddings)
+        except Exception:
+            logger.warning("aggregate relevance gate skipped (embedding error)", exc_info=True)
+        else:
+            if relevance < get_settings().min_aggregate_similarity:
+                logger.info("aggregate no_match: relevance %.3f below floor", relevance)
+                NO_MATCH.inc()
+                empty = AggregatorResult(query=query, offers=[], no_match=True)
+                cache.set_json(key, empty.model_dump(), AGGREGATE_TTL_SECONDS)
+                yield "final", empty
+                return
+
     ranked = rank_offers(offers, config)[:k]
     if not ranked:
         yield "final", AggregatorResult(query=query, offers=[], no_match=True)
@@ -248,6 +283,7 @@ def aggregate(
     config: RankingConfig | None = None,
     callbacks: list[Any] | None = None,
     search_fn: Callable[[str, int], list[Offer]] | None = None,
+    embeddings: Any | None = None,
 ) -> AggregatorResult:
     """Blocking aggregation (kept for the non-streaming /aggregate endpoint + tests).
 
@@ -264,6 +300,7 @@ def aggregate(
         config=config,
         callbacks=callbacks,
         search_fn=search_fn,
+        embeddings=embeddings,
     ):
         if stage == "final":
             final = result
