@@ -75,6 +75,53 @@ injected text in a review or a listing **cannot add, remove, or reorder a recomm
 
 ---
 
+## 🖼️ Screenshots
+
+<div align="center">
+
+### Landing Page
+![Landing page](assets/screenshots/landing_page.png)
+*The marketing/landing page (`apps/web` App Router).*
+
+### Query & Streaming Recommendations
+![Query and streaming recommendations](assets/screenshots/recommend.png)
+*Ask in natural language → grounded recommendation cards → the "why it matches" explanation streams in below.*
+
+### Prometheus
+![Prometheus target](assets/screenshots/prometheus_target.png)
+![Prometheus Rules](assets/screenshots/prometheus_rules.png)
+*Prometheus targets + alerting rules — the live SerpApi source is **metered** and the global budget is **guarded** by a Redis counter. A single user inside their own quota can drain everyone's month, so the alerting rules watch for `source_unavailable` and `source_unavailable_total{reason="budget_exceeded"}`.*
+
+### Real-time Monitoring: Graffana
+![Grafana API overview dashboard](assets/screenshots/graffana.png)
+*Grafana overview dashboard*
+
+### Langfuse
+![Langfuse trace detail](assets/screenshots/langfuse_dashboard.png)
+![Langfuse trace detail](assets/screenshots/langfuse_runnables.png)
+*Langfuse trace detail — the LLM gateway and the Qdrant hybrid store are instrumented with Langfuse runnables, so you can see **per-request LLM cost, latency, and token usage**.*
+
+### JAEGER UI
+![JAEGER UI](assets/screenshots/jaeger_dashboard.png)
+![JAEGER UI](assets/screenshots/jaeger_search.png)
+*Jaeger UI — traces from the FastAPI backend, including the LLM gateway and the Qdrant hybrid store.*
+
+### Qdrant Dashboard
+![Qdrant dashboard](assets/screenshots/qdrant_dashboard.png)
+*Qdrant dashboard — the hybrid store for the catalog path. The semantic cache is a Qdrant collection that stores embeddings for near-duplicate queries, so a repeat query costs **0 searches and 0 LLM calls**.*
+
+### RedisInsight and Redis cache
+![RedisInsight](assets/screenshots/redisinsight.png)
+![RedisInsight](assets/screenshots/redis_cache.png)
+*RedisInsight — both the app cache and the Langfuse Redis are pre-registered on first boot.*
+
+### MinIO Console
+![MinIO Console](assets/screenshots/minio.png)
+*MinIO Console (Langfuse S3) — for pgAdmin/DBeaver/psql/MinIO-console access to the Langfuse infra.*
+</div>
+
+---
+
 ## 🏗️ Architecture
 
 ```
