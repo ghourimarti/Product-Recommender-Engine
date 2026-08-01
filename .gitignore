@@ -48,7 +48,7 @@ old/
 # no longer renders. Rather than ship stale marketing imagery, the README documents
 # behaviour in text and the eval reports carry the evidence.
 # If screenshots are re-added later they must be captured AFTER a UI change, not before.
-screenshots/
+# screenshots/
 
 # Local editor / assistant tooling
 .claude/
