@@ -39,9 +39,6 @@ Thumbs.db
 READMEcopy.md
 
 # Private working notes (planning drafts) — not part of the shipped project
-Prompts/
-demo/
-old/
 # Screenshots are not published. The previous set was captured before the UI was
 # cleaned of fabricated social proof, so the committed landing-page image still
 # advertised "4.8/5 by 2,400+ users" and six invented customer logos that the app
@@ -55,4 +52,4 @@ old/
 
 # Working docs (planning notes, eval reports, runbooks) are kept local only.
 # The CI eval gate reads packages/evaluation/ranking/baseline.json (tracked), not docs/.
-docs/
+Document/
