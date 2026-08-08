@@ -1,4 +1,5 @@
 <div align="center">
+
 # ProductIQ — Conversational Product Recommender
 
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
