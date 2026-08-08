@@ -2,8 +2,6 @@
 
 # ProductIQ — Conversational Product Recommender
 
-### One Rating-Aware Ranking Core · Two Retrieval Backends: Your Catalog, or the Live Web
-
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![LangChain](https://img.shields.io/badge/LangChain-LCEL-1C3C3C?style=flat-square&logo=langchain&logoColor=white)](#-how-it-works)
@@ -271,8 +269,7 @@ P2-Product-Recommendion-engine/            # uv workspace (monorepo)
 ## 🚀 Quick Start
 
 > The repo is **driven by a `Makefile`** (`make help`-style targets below). It wraps a **4-layer
-> docker-compose** stack under one project. All host ports live in `.env` (a `2001–2018` scheme so
-> the whole stack fits on one machine). `2013–2018` back the Langfuse infra (Postgres/ClickHouse/
+> docker-compose** stack under one project. All host ports live in `.env` (a `2001–2018` scheme). `2013–2018` back the Langfuse infra (Postgres/ClickHouse/
 > Redis/MinIO) — published so pgAdmin/DBeaver/psql/MinIO-console work directly on the host.
 
 ### Prerequisites
