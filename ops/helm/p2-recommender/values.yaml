@@ -7,9 +7,15 @@
 #
 # Resource names are fixed (api, web, qdrant, redis), so in-cluster URLs don't depend on the
 # release name. The trade-off is one release per namespace.
+#
+# Every pod runs the "restricted" Pod Security profile: non-root (numeric UIDs below), no
+# privilege escalation, all capabilities dropped, seccomp RuntimeDefault, read-only root
+# filesystem with emptyDirs or PVCs exactly where each image writes. Each setting was checked by
+# running the real image that way in Docker (2026-10-06).
 
 # The chart doesn't create secrets. It expects a Secret with this name to already exist in the
-# namespace and loads it into the api pod with envFrom. How it gets there is per environment:
+# namespace. The api loads all of it (envFrom); web reads only CLERK_SECRET_KEY; Qdrant reads only
+# QDRANT_API_KEY. How the Secret gets there is per environment:
 #   kind: a make target builds it from a filtered .env (Phase 6)
 #   DOKS: decided in Phase 7 (SOPS or the External Secrets Operator)
 #   EKS:  External Secrets Operator + AWS Secrets Manager (Phase 8; not built yet)
@@ -25,6 +31,19 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
   pullSecrets: [] # e.g. [{name: docr-pull}] for a private registry
+
+# Zero-downtime rollouts: a terminating api/web pod keeps serving this long, while its endpoint
+# removal propagates to every node and the Gateway.
+preStopSleepSeconds: 5
+
+# Spread api/web replicas across nodes. Soft (ScheduleAnyway), so a one-node cluster still works.
+topologySpread:
+  enabled: true
+
+# PodDisruptionBudgets for api and web: drains and upgrades take at most this many at a time.
+pdb:
+  enabled: true
+  maxUnavailable: 1
 
 api:
   image:
@@ -53,6 +72,15 @@ api:
     minReplicas: 2
     maxReplicas: 10
     targetCPUUtilizationPercentage: 70
+  # A hardened api container took 28 s to report healthy (measured 2026-10-06). 5 s x 36 gives
+  # 180 s of headroom for a slow start on a busy node before liveness can restart it.
+  startupProbe:
+    failureThreshold: 36
+  terminationGracePeriodSeconds: 30 # must exceed preStopSleepSeconds + uvicorn's drain time
+  securityContext:
+    runAsUser: 10001 # the image's appuser. Numeric on purpose: the image sets USER by name.
+    runAsGroup: 10001
+    readOnlyRootFilesystem: true # writes go to an emptyDir at /tmp (fastembed's model cache)
   serviceAccount:
     create: true
     name: p2-api
@@ -72,6 +100,10 @@ web:
     limits:
       cpu: 500m
       memory: 512Mi
+  securityContext:
+    runAsUser: 10001 # the image's webuser (USER is set by name in the image)
+    runAsGroup: 10001
+    readOnlyRootFilesystem: true # writes go to emptyDirs at /tmp and /app/.next/cache
 
 # qdrant.port / redis.port are the ports the IMAGES speak inside the pod (Qdrant 6333,
 # Redis 6379). They're the image contract, not host ports, so leave them on their well-known
@@ -79,18 +111,44 @@ web:
 qdrant:
   image:
     repository: qdrant/qdrant
-    tag: v1.12.4
+    tag: v1.12.4-unprivileged # runs as uid 1000; the plain v1.12.4 image runs as root
   port: 6333
   storage: 10Gi
   # Empty = the cluster's default StorageClass. Set it per environment. volumeClaimTemplates
   # can't be changed after the first install, so get this right before then.
   storageClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000 # makes the PVC writable on storage classes that honour fsGroup
+    readOnlyRootFilesystem: true # data on the PVC; snapshots and /tmp on emptyDirs
 
 redis:
   image:
     repository: redis
     tag: 7.4-alpine
   port: 6379
+  storage: 1Gi
+  storageClassName: "" # set per environment, like qdrant.storageClassName
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  securityContext:
+    runAsUser: 999 # the image's redis account
+    runAsGroup: 1000
+    fsGroup: 1000
+    readOnlyRootFilesystem: true # AOF and snapshots go to the PVC at /data
 
 # Routing gets redesigned in step 6D (Gateway API). The class is set per environment.
 ingress:

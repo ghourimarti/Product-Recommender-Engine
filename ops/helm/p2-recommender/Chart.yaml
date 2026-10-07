@@ -3,5 +3,7 @@ name: p2-recommender
 description: Conversational, rating-aware product recommender (api + web + qdrant + redis)
 type: application
 # 0.2.0: standard selector labels, per-environment values overlays, required immutable image tags.
-version: 0.2.0
+# 0.3.0: restricted Pod Security profile, probes, PDBs, topology spread, Redis as a StatefulSet
+#        with AOF on a PVC, Qdrant API key enforced, headless governing Services.
+version: 0.3.0
 appVersion: "0.1.0"

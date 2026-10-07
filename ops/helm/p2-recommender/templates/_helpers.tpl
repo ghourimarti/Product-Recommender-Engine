@@ -54,3 +54,49 @@ Usage: include "p2.image" (dict "image" .Values.api.image "root" .)
 {{- printf "%s:%s" .image.repository $tag -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Pod half of the "restricted" Pod Security profile. runAsUser must be numeric: the api and web
+images set USER by name (appuser / webuser), and the kubelet won't start a runAsNonRoot pod when
+it can't verify that a named user isn't root.
+
+Usage: include "p2.podSecurityContext" .Values.api.securityContext
+*/}}
+{{- define "p2.podSecurityContext" -}}
+runAsNonRoot: true
+runAsUser: {{ .runAsUser }}
+runAsGroup: {{ .runAsGroup }}
+{{- with .fsGroup }}
+fsGroup: {{ . }}
+{{- end }}
+seccompProfile:
+  type: RuntimeDefault
+{{- end -}}
+
+{{/* Container half of the restricted profile. */}}
+{{- define "p2.containerSecurityContext" -}}
+allowPrivilegeEscalation: false
+readOnlyRootFilesystem: {{ .readOnlyRootFilesystem }}
+capabilities:
+  drop:
+    - ALL
+{{- end -}}
+
+{{/*
+Spread a Deployment's replicas across nodes. Soft (ScheduleAnyway), so a one-node cluster still
+schedules everything. matchLabelKeys keeps the old and new ReplicaSets from being counted
+together during a rollout, which would otherwise let new pods pile onto one node.
+
+Usage: include "p2.topologySpread" (dict "root" . "component" "api")
+*/}}
+{{- define "p2.topologySpread" -}}
+- maxSkew: 1
+  topologyKey: kubernetes.io/hostname
+  whenUnsatisfiable: ScheduleAnyway
+  labelSelector:
+    matchLabels:
+      {{- include "p2.selectorLabels" .root | nindent 6 }}
+      app.kubernetes.io/component: {{ .component }}
+  matchLabelKeys:
+    - pod-template-hash
+{{- end -}}

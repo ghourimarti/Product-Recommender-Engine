@@ -1,0 +1,21 @@
+{{- /* PodDisruptionBudgets for the replicated, stateless workloads, so a node drain or cluster
+upgrade never takes every replica down at once. maxUnavailable (rather than minAvailable) never
+blocks a drain outright, even when a workload is scaled down to one replica. */}}
+{{- if .Values.pdb.enabled }}
+{{- range $component := list "api" "web" }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $component }}
+  labels:
+    {{- include "p2.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  maxUnavailable: {{ $.Values.pdb.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "p2.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $component }}
+{{- end }}
+{{- end }}

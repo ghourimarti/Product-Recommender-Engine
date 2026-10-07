@@ -1,0 +1,18 @@
+{{- /* Governing Service for the Redis StatefulSet. Clients keep using the regular `redis` Service. */}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-headless
+  labels:
+    {{- include "p2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  clusterIP: None
+  selector:
+    {{- include "p2.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+  ports:
+    - name: redis
+      protocol: TCP
+      port: {{ .Values.redis.port }}
+      targetPort: redis

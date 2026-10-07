@@ -1,0 +1,19 @@
+{{- /* Governing Service for the Qdrant StatefulSet (stable per-pod DNS). Clients keep using the
+regular `qdrant` Service. */}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant-headless
+  labels:
+    {{- include "p2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: qdrant
+spec:
+  clusterIP: None
+  selector:
+    {{- include "p2.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: qdrant
+  ports:
+    - name: http
+      protocol: TCP
+      port: {{ .Values.qdrant.port }}
+      targetPort: http

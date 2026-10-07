@@ -6,7 +6,7 @@ metadata:
     {{- include "p2.labels" . | nindent 4 }}
     app.kubernetes.io/component: qdrant
 spec:
-  serviceName: qdrant
+  serviceName: qdrant-headless
   replicas: 1
   selector:
     matchLabels:
@@ -18,15 +18,64 @@ spec:
         {{- include "p2.labels" . | nindent 8 }}
         app.kubernetes.io/component: qdrant
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "p2.podSecurityContext" .Values.qdrant.securityContext | nindent 8 }}
       containers:
         - name: qdrant
           image: "{{ .Values.qdrant.image.repository }}:{{ .Values.qdrant.image.tag }}"
           ports:
             - name: http
               containerPort: {{ .Values.qdrant.port }}
+          {{- /* Enforced only when the Secret has QDRANT_API_KEY (optional), as in compose. The api
+          reads the same key through envFrom, so both sides always agree. */}}
+          env:
+            - name: QDRANT__SERVICE__API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: QDRANT_API_KEY
+                  optional: true
+          resources:
+            {{- toYaml .Values.qdrant.resources | nindent 12 }}
+          securityContext:
+            {{- include "p2.containerSecurityContext" .Values.qdrant.securityContext | nindent 12 }}
+          {{- /* /livez, /readyz and /healthz answer without the API key (checked on v1.12.4,
+          2026-10-06: they return 200 while /collections returns 401), so plain httpGet probes
+          work with the key enforced. */}}
+          startupProbe:
+            httpGet:
+              path: /livez
+              port: http
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            periodSeconds: 20
+          {{- /* Read-only root: data on the PVC, snapshot staging and /tmp on emptyDirs. Without a
+          writable snapshots dir Qdrant panics at startup. One harmless WARN remains: it can't
+          write its init marker into the read-only working directory. */}}
           volumeMounts:
             - name: storage
               mountPath: /qdrant/storage
+            - name: snapshots
+              mountPath: /qdrant/snapshots
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: snapshots
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
   {{- /* volumeClaimTemplates can't be changed after the first install, so the storage class
   has to be right before then. Empty = the cluster's default class. */}}
   volumeClaimTemplates:

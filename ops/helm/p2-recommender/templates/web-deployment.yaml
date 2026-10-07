@@ -17,6 +17,13 @@ spec:
         {{- include "p2.labels" . | nindent 8 }}
         app.kubernetes.io/component: web
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "p2.podSecurityContext" .Values.web.securityContext | nindent 8 }}
+      {{- if .Values.topologySpread.enabled }}
+      topologySpreadConstraints:
+        {{- include "p2.topologySpread" (dict "root" . "component" "web") | nindent 8 }}
+      {{- end }}
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -28,5 +35,40 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.web.port }}
+          {{- /* Only the Clerk server key, not the whole Secret: the web pod has no business
+          holding the LLM, SerpApi or AWS keys. */}}
+          env:
+            - name: CLERK_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretName }}
+                  key: CLERK_SECRET_KEY
           resources:
             {{- toYaml .Values.web.resources | nindent 12 }}
+          securityContext:
+            {{- include "p2.containerSecurityContext" .Values.web.securityContext | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: {{ .Values.preStopSleepSeconds }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: next-cache # read-only root: Next.js writes its runtime cache here
+              mountPath: /app/.next/cache
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: next-cache
+          emptyDir:
+            sizeLimit: 256Mi

@@ -19,3 +19,6 @@ api:
 qdrant:
   storage: 2Gi
   storageClassName: standard # kind's local-path provisioner: a directory on one node's disk
+
+redis:
+  storageClassName: standard

@@ -7,5 +7,8 @@ qdrant:
   # Needs the EBS CSI driver and a StorageClass named gp3, both created in Phase 8.
   storageClassName: gp3
 
+redis:
+  storageClassName: gp3 # until Phase 8 swaps in-cluster Redis for ElastiCache
+
 ingress:
   className: alb # AWS Load Balancer Controller. Routing gets redesigned in step 6D.

@@ -10,3 +10,6 @@ api:
 qdrant:
   # DO block storage is network-attached, so the volume can follow the pod to another node.
   storageClassName: do-block-storage
+
+redis:
+  storageClassName: do-block-storage

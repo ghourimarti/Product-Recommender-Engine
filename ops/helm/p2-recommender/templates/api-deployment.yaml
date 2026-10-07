@@ -22,6 +22,14 @@ spec:
         app.kubernetes.io/component: api
     spec:
       serviceAccountName: {{ .Values.api.serviceAccount.name }}
+      automountServiceAccountToken: false # the api never calls the Kubernetes API
+      terminationGracePeriodSeconds: {{ .Values.api.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- include "p2.podSecurityContext" .Values.api.securityContext | nindent 8 }}
+      {{- if .Values.topologySpread.enabled }}
+      topologySpreadConstraints:
+        {{- include "p2.topologySpread" (dict "root" . "component" "api") | nindent 8 }}
+      {{- end }}
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -43,15 +51,39 @@ spec:
             {{- end }}
           resources:
             {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext:
+            {{- include "p2.containerSecurityContext" .Values.api.securityContext | nindent 12 }}
+          {{- /* The ML imports are slow: 28 s to the first healthy /health in a hardened container
+          (measured 2026-10-06). The startup probe holds liveness off until then, so a slow start
+          on a busy node isn't killed mid-import. /health is shallow on purpose: a dependency
+          outage degrades the app (popularity fallback) instead of restarting it. */}}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: {{ .Values.api.startupProbe.failureThreshold }}
           readinessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 10
             periodSeconds: 20
+            failureThreshold: 3
+          {{- /* Endpoint removal propagates asynchronously, so a terminating pod still receives
+          requests for a few seconds. Keep serving through that window (zero-downtime rollouts). */}}
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: {{ .Values.preStopSleepSeconds }}
+          volumeMounts:
+            - name: tmp # read-only root: fastembed caches its BM25 model in /tmp/fastembed_cache
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi
