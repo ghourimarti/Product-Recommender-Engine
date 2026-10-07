@@ -3,23 +3,30 @@ kind: Deployment
 metadata:
   name: web
   labels:
-    app: web
     {{- include "p2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
 spec:
   replicas: {{ .Values.web.replicas }}
   selector:
     matchLabels:
-      app: web
+      {{- include "p2.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web
   template:
     metadata:
       labels:
-        app: web
+        {{- include "p2.labels" . | nindent 8 }}
+        app.kubernetes.io/component: web
     spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: web
-          image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
-          imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          image: {{ include "p2.image" (dict "image" .Values.web.image "root" .) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
-            - containerPort: {{ .Values.web.port }}
+            - name: http
+              containerPort: {{ .Values.web.port }}
           resources:
             {{- toYaml .Values.web.resources | nindent 12 }}

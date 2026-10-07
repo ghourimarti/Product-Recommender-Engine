@@ -1,0 +1,21 @@
+# kind (Phase 6): local, production-like practice on the 3-node cluster from infra/kind/.
+#   helm upgrade --install p2 ops/helm/p2-recommender -n p2 --create-namespace \
+#     -f ops/helm/p2-recommender/values-kind.yaml --set-string image.tag=<git-sha>
+# Images are built locally and loaded into the nodes with `kind load docker-image`.
+
+image:
+  # Never pull: the images only exist inside the nodes. If one wasn't loaded, the pod fails at
+  # once with ErrImageNeverPull instead of a confusing "pull access denied" from Docker Hub.
+  pullPolicy: Never
+
+api:
+  autoscaling:
+    # Each kind node is a container that reports the whole Docker VM as allocatable (measured
+    # 2026-10-06: 8133208Ki and 16 CPUs on every node), so the scheduler sees 3x the real memory
+    # and overcommits without complaint. Requests don't protect us on kind; this cap does.
+    # ~5.9 GB was free in step 6A, and an api pod uses ~350 MB.
+    maxReplicas: 4
+
+qdrant:
+  storage: 2Gi
+  storageClassName: standard # kind's local-path provisioner: a directory on one node's disk

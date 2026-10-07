@@ -3,11 +3,14 @@ kind: Service
 metadata:
   name: web
   labels:
-    app: web
+    {{- include "p2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
 spec:
   selector:
-    app: web
+    {{- include "p2.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: web
   ports:
-    - protocol: TCP
+    - name: http
+      protocol: TCP
       port: {{ .Values.web.port }}
-      targetPort: {{ .Values.web.port }}
+      targetPort: http

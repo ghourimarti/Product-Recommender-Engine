@@ -1,0 +1,12 @@
+# DigitalOcean DOKS (Phase 7). Only settings that are decided now live here. Phase 7 adds:
+#   image.registry:    registry.digitalocean.com/<registry-name>
+#   image.pullSecrets: the DOCR pull secret
+#   routing and TLS:   Gateway hostnames + cert-manager (templates arrive in step 6D)
+
+api:
+  autoscaling:
+    maxReplicas: 6 # real nodes: scale-out is bounded by the node pool, not one Docker VM
+
+qdrant:
+  # DO block storage is network-attached, so the volume can follow the pod to another node.
+  storageClassName: do-block-storage

@@ -2,5 +2,6 @@ apiVersion: v2
 name: p2-recommender
 description: Conversational, rating-aware product recommender (api + web + qdrant + redis)
 type: application
-version: 0.1.0
+# 0.2.0: standard selector labels, per-environment values overlays, required immutable image tags.
+version: 0.2.0
 appVersion: "0.1.0"

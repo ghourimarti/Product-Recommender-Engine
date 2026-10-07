@@ -3,20 +3,23 @@ kind: Deployment
 metadata:
   name: redis
   labels:
-    app: redis
     {{- include "p2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: redis
+      {{- include "p2.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis
   template:
     metadata:
       labels:
-        app: redis
+        {{- include "p2.labels" . | nindent 8 }}
+        app.kubernetes.io/component: redis
     spec:
       containers:
         - name: redis
           image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
           ports:
-            - containerPort: {{ .Values.redis.port }}
+            - name: redis
+              containerPort: {{ .Values.redis.port }}

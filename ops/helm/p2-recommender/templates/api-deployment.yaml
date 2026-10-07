@@ -3,25 +3,36 @@ kind: Deployment
 metadata:
   name: api
   labels:
-    app: api
     {{- include "p2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
 spec:
+  {{- /* With the HPA on, the HPA owns the replica count. A fixed replicas field would make every
+  helm upgrade reset it, and under server-side apply it fights the HPA for field ownership. */}}
+  {{- if not .Values.api.autoscaling.enabled }}
   replicas: {{ .Values.api.replicas }}
+  {{- end }}
   selector:
     matchLabels:
-      app: api
+      {{- include "p2.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
   template:
     metadata:
       labels:
-        app: api
+        {{- include "p2.labels" . | nindent 8 }}
+        app.kubernetes.io/component: api
     spec:
       serviceAccountName: {{ .Values.api.serviceAccount.name }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: api
-          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
-          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          image: {{ include "p2.image" (dict "image" .Values.api.image "root" .) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
-            - containerPort: {{ .Values.api.port }}
+            - name: http
+              containerPort: {{ .Values.api.port }}
           envFrom:
             - secretRef:
                 name: {{ .Values.secretName }}
@@ -35,12 +46,12 @@ spec:
           readinessProbe:
             httpGet:
               path: /health
-              port: {{ .Values.api.port }}
+              port: http
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /health
-              port: {{ .Values.api.port }}
+              port: http
             initialDelaySeconds: 10
             periodSeconds: 20

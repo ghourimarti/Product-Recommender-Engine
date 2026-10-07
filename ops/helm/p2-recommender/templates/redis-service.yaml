@@ -3,11 +3,14 @@ kind: Service
 metadata:
   name: redis
   labels:
-    app: redis
+    {{- include "p2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
 spec:
   selector:
-    app: redis
+    {{- include "p2.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
   ports:
-    - protocol: TCP
+    - name: redis
+      protocol: TCP
       port: {{ .Values.redis.port }}
-      targetPort: {{ .Values.redis.port }}
+      targetPort: redis

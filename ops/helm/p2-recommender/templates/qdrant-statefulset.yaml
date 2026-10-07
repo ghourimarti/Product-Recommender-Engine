@@ -3,32 +3,40 @@ kind: StatefulSet
 metadata:
   name: qdrant
   labels:
-    app: qdrant
     {{- include "p2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: qdrant
 spec:
   serviceName: qdrant
   replicas: 1
   selector:
     matchLabels:
-      app: qdrant
+      {{- include "p2.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: qdrant
   template:
     metadata:
       labels:
-        app: qdrant
+        {{- include "p2.labels" . | nindent 8 }}
+        app.kubernetes.io/component: qdrant
     spec:
       containers:
         - name: qdrant
           image: "{{ .Values.qdrant.image.repository }}:{{ .Values.qdrant.image.tag }}"
           ports:
-            - containerPort: {{ .Values.qdrant.port }}
+            - name: http
+              containerPort: {{ .Values.qdrant.port }}
           volumeMounts:
             - name: storage
               mountPath: /qdrant/storage
+  {{- /* volumeClaimTemplates can't be changed after the first install, so the storage class
+  has to be right before then. Empty = the cluster's default class. */}}
   volumeClaimTemplates:
     - metadata:
         name: storage
       spec:
         accessModes: ["ReadWriteOnce"]
+        {{- with .Values.qdrant.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
         resources:
           requests:
             storage: {{ .Values.qdrant.storage }}

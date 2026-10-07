@@ -1,14 +1,37 @@
-# Secrets (DB creds, API keys) are synced into this k8s Secret by the External Secrets
-# Operator from AWS Secrets Manager. The chart references it via envFrom.
+# Common values for every environment. Per-environment overlays sit beside this file:
+#   values-kind.yaml (Phase 6) · values-doks.yaml (Phase 7) · values-eks.yaml (Phase 8)
+#
+#   helm upgrade --install p2 ops/helm/p2-recommender -n p2 --create-namespace \
+#     -f ops/helm/p2-recommender/values-<env>.yaml \
+#     --set-string image.tag=$(git rev-parse --short HEAD)
+#
+# Resource names are fixed (api, web, qdrant, redis), so in-cluster URLs don't depend on the
+# release name. The trade-off is one release per namespace.
+
+# The chart doesn't create secrets. It expects a Secret with this name to already exist in the
+# namespace and loads it into the api pod with envFrom. How it gets there is per environment:
+#   kind: a make target builds it from a filtered .env (Phase 6)
+#   DOKS: decided in Phase 7 (SOPS or the External Secrets Operator)
+#   EKS:  External Secrets Operator + AWS Secrets Manager (Phase 8; not built yet)
 secretName: p2-secrets
+
+# Images we build (api, web). One shared tag, because both are built from the same commit.
+image:
+  # Empty = local images loaded into the nodes (kind).
+  # DOKS: registry.digitalocean.com/<name> · EKS: <account>.dkr.ecr.<region>.amazonaws.com
+  registry: ""
+  # REQUIRED: an immutable git SHA. Empty and "latest" fail the render. Pass it with
+  # --set-string, because plain --set turns an all-digit SHA (e.g. 1234567) into a number.
+  tag: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: [] # e.g. [{name: docr-pull}] for a private registry
 
 api:
   image:
     repository: p2-api
-    tag: latest
-    pullPolicy: IfNotPresent
-  replicas: 2
-  # Matches the container's EXPOSE (env-driven — see apps/api/Dockerfile + .env).
+    tag: "" # optional override; empty = image.tag
+  replicas: 2 # only used when autoscaling is disabled (otherwise the HPA owns it)
+  # Matches the container's EXPOSE (env-driven: see apps/api/Dockerfile + .env).
   # If you change API_PORT in .env, update this to match.
   port: 2011
   resources:
@@ -19,8 +42,8 @@ api:
       cpu: "1"
       memory: 1Gi
   env:
-    # Cluster-internal URLs use k8s Service names on their INTERNAL ports
-    # (Qdrant image speaks 6333, Redis speaks 6379 — those don't change).
+    # Cluster-internal URLs use Service names on their INTERNAL ports
+    # (the Qdrant image speaks 6333 and Redis 6379; those don't change).
     QDRANT_URL: http://qdrant:6333
     REDIS_URL: redis://redis:6379/0
     OTEL_EXPORTER_OTLP_ENDPOINT: ""
@@ -33,15 +56,14 @@ api:
   serviceAccount:
     create: true
     name: p2-api
-    annotations: {}  # prod: eks.amazonaws.com/role-arn: <IRSA role ARN> (DynamoDB/Secrets access)
+    annotations: {} # EKS: the IRSA role ARN goes here (values-eks.yaml, Phase 8)
 
 web:
   image:
     repository: p2-web
-    tag: latest
-    pullPolicy: IfNotPresent
+    tag: "" # optional override; empty = image.tag
   replicas: 2
-  # Matches the container's EXPOSE (env-driven — see apps/web/Dockerfile + .env).
+  # Matches the container's EXPOSE (env-driven: see apps/web/Dockerfile + .env).
   port: 2012
   resources:
     requests:
@@ -51,15 +73,18 @@ web:
       cpu: 500m
       memory: 512Mi
 
-# NOTE: qdrant.port / redis.port are the ports the IMAGES speak inside the pod
-# (Qdrant → 6333, Redis → 6379). These are the image contract, not host ports —
-# leave them on their well-known values. Host-side ports live in .env.
+# qdrant.port / redis.port are the ports the IMAGES speak inside the pod (Qdrant 6333,
+# Redis 6379). They're the image contract, not host ports, so leave them on their well-known
+# values. Host-side ports live in .env.
 qdrant:
   image:
     repository: qdrant/qdrant
     tag: v1.12.4
   port: 6333
   storage: 10Gi
+  # Empty = the cluster's default StorageClass. Set it per environment. volumeClaimTemplates
+  # can't be changed after the first install, so get this right before then.
+  storageClassName: ""
 
 redis:
   image:
@@ -67,7 +92,8 @@ redis:
     tag: 7.4-alpine
   port: 6379
 
+# Routing gets redesigned in step 6D (Gateway API). The class is set per environment.
 ingress:
   enabled: false
-  className: alb
+  className: ""
   host: recommender.example.com

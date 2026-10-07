@@ -3,7 +3,7 @@
         serve build-backend \
         db services app obs observability langfuse full up upv \
         ps logs down downv seed bootstrap urls wait-api \
-        helm-lint
+        helm-lint kind-up kind-down
 
 # ─── Layered local stack ──────────────────────────────────────────────────────
 #   db             = data stores only    (Qdrant + DynamoDB-local + Redis)
@@ -186,9 +186,35 @@ bootstrap:      ## FROM SCRATCH: bring app tier up, index catalog, print URLs
 
 # ─── Helm  ────────────────────────────────────────────────────────────────────
 
-helm-lint:      ## Lint the Helm chart + validate rendered manifests
-	helm lint ops/helm/p2-recommender
-	helm template p2 ops/helm/p2-recommender | kubeconform -summary
+#   One lint per environment values file. The chart refuses to render without an explicit,
+#   immutable image tag, so lint uses a placeholder SHA. Always pass tags with --set-string:
+#   plain --set turns an all-digit SHA (e.g. 1234567) into a number.
+
+HELM_CHART        := ops/helm/p2-recommender
+HELM_ENVS         := kind doks eks
+HELM_LINT_TAG     := 0000000
+HELM_LINT_TARGETS := $(addprefix helm-lint-,$(HELM_ENVS))
+KUBECONFORM       := kubeconform -strict -summary -kubernetes-version 1.36.1
+.PHONY: $(HELM_LINT_TARGETS)
+
+helm-lint: $(HELM_LINT_TARGETS)   ## Lint + schema-validate the chart for every environment
+
+$(HELM_LINT_TARGETS): helm-lint-%:   ## Lint + schema-validate one environment, e.g. make helm-lint-kind
+	helm lint --strict $(HELM_CHART) -f $(HELM_CHART)/values-$*.yaml --set-string image.tag=$(HELM_LINT_TAG)
+	helm template p2 $(HELM_CHART) -f $(HELM_CHART)/values-$*.yaml --set-string image.tag=$(HELM_LINT_TAG) | $(KUBECONFORM)
+
+
+# ─── kind  (Phase 6: local, production-like Kubernetes; $0) ───────────────────
+#   The compose stack and a kind cluster don't fit in the 8 GB Docker VM together:
+#   run `make down` first.
+
+KIND_CLUSTER ?= p2
+
+kind-up:        ## Phase 6: create the kind cluster (1 control-plane + 2 workers, pinned image)
+	kind create cluster --name $(KIND_CLUSTER) --config infra/kind/kind-config.yaml
+
+kind-down:      ## Phase 6: delete the kind cluster
+	kind delete cluster --name $(KIND_CLUSTER)
 
 
 # ─── wait-api  (poll API /health after boot; used by full/upv/bootstrap) ──────

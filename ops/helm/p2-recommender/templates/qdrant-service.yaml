@@ -3,11 +3,14 @@ kind: Service
 metadata:
   name: qdrant
   labels:
-    app: qdrant
+    {{- include "p2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: qdrant
 spec:
   selector:
-    app: qdrant
+    {{- include "p2.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: qdrant
   ports:
-    - protocol: TCP
+    - name: http
+      protocol: TCP
       port: {{ .Values.qdrant.port }}
-      targetPort: {{ .Values.qdrant.port }}
+      targetPort: http

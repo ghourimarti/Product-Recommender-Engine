@@ -1,0 +1,11 @@
+# AWS EKS (Phase 8). Only settings that are decided now live here. Phase 8 adds:
+#   image.registry:                 <account>.dkr.ecr.<region>.amazonaws.com
+#   api.serviceAccount.annotations: eks.amazonaws.com/role-arn (IRSA, from the Terraform outputs)
+#   Redis moves to ElastiCache; secrets come from External Secrets Operator + Secrets Manager
+
+qdrant:
+  # Needs the EBS CSI driver and a StorageClass named gp3, both created in Phase 8.
+  storageClassName: gp3
+
+ingress:
+  className: alb # AWS Load Balancer Controller. Routing gets redesigned in step 6D.
