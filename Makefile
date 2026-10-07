@@ -245,8 +245,8 @@ IMAGE_TAG := $(shell uv run python infra/kind/image_tag.py)
 endif
 endif
 
-kind-up:        ## Phase 6: create the kind cluster (1 control-plane + 2 workers, pinned image)
-	kind create cluster --name $(KIND_CLUSTER) --config infra/kind/kind-config.yaml
+kind-up:        ## Phase 6: create the kind cluster (1 control-plane + 2 workers, pinned image); skips an existing one
+	$(if $(filter $(KIND_CLUSTER),$(shell kind get clusters)),@echo kind cluster $(KIND_CLUSTER) already exists - not recreating it,kind create cluster --name $(KIND_CLUSTER) --config infra/kind/kind-config.yaml)
 
 kind-down:      ## Phase 6: delete the kind cluster
 	kind delete cluster --name $(KIND_CLUSTER)

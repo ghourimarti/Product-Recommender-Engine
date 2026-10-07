@@ -100,11 +100,13 @@ jobs:
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
-      # `npm audit` reports transitive dev-tooling advisories that no deployed artifact ships;
-      # gating at `high` keeps this a signal rather than permanent noise.
+      # Runtime dependencies only (--omit=dev), the same policy as the Python audit above: the
+      # standalone web image ships no dev tooling. Build-only advisories (Tailwind v3's file
+      # watchers, 2026-10-07) are tracked as a Tailwind v4 migration. Gating at `high` keeps
+      # this a signal rather than permanent noise.
       - name: Audit npm dependencies
         working-directory: apps/web
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
 
   integration:
     # Real local services via GitHub service containers. Tests that also need API keys

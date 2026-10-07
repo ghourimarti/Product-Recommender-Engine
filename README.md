@@ -678,7 +678,7 @@ Table: p2-recommender
 | **Answer quality** | answer-relevancy 0.94 · context-precision 0.65 · **faithfulness 0.56** (weak — improvement target, see [Roadmap](#-roadmap)) | `make eval-rag` — **needs LLM keys**, report not committed |
 | **Reranker A/B** | bge cross-encoder **regressed** NDCG@3 (−0.02) / Recall@3 (−0.07) → **gated off** (measure, don't assume) | part of `make eval-ranking`, same requirements |
 | **Tests** | **117** (108 offline + 9 integration-marked) · mypy **strict** clean · ruff clean | `uv run pytest --collect-only -q` |
-| **Dependency CVEs** | **0 unignored** — `pip-audit` + `npm audit --audit-level=high` block every PR. First run found 36 Python advisories in 11 packages (incl. `starlette` on the request path) and 3 npm high-severity groups (incl. Next.js SSRF); all cleared by upgrade. Six langchain advisories remain **enumerated by ID**, not suppressed by package — a *new* langchain CVE still fails the build. See [Roadmap](#-roadmap) |
+| **Dependency CVEs** | **0 unignored** — `pip-audit` + `npm audit --omit=dev --audit-level=high` (runtime dependencies) block every PR. First run found 36 Python advisories in 11 packages (incl. `starlette` on the request path) and 3 npm high-severity groups (incl. Next.js SSRF); all cleared by upgrade. Six langchain advisories remain **enumerated by ID**, not suppressed by package — a *new* langchain CVE still fails the build. See [Roadmap](#-roadmap) |
 | **Cost** | Search-metered, not compute-bound: SerpApi free tier is 250/month and every cache miss spends one. Global day/month budget guard + 6h result cache. LLM cost capped by `MAX_OUTPUT_TOKENS` + kill switch | `SERPAPI_*` in `.env.example` |
 | **Deploy** | Local Docker verified (API image builds, `/health` OK) · Helm chart structurally validated · Terraform **HCL syntax-valid, never applied** | `make helm-lint`, `terraform validate` |
 
@@ -715,17 +715,20 @@ A clean local → cloud path:
    ```bash
    cd infra/terraform && terraform init && terraform validate && terraform plan   # no apply
    ```
-5. **CI/CD** — GitHub Actions, four jobs on every push and PR; currently green:
+5. **CI/CD** — GitHub Actions, four jobs on every push and PR:
    `quality` (ruff → mypy strict → offline tests → **eval gate**) · `frontend` (`tsc` +
-   `next build`) · `security` (**`pip-audit` + `npm audit`, both blocking**) · `integration`
-   (real Qdrant/Redis/DynamoDB service containers; key-gated tests auto-skip).
+   `next build`) · `security` (**`pip-audit` + `npm audit` on the runtime dependencies, both
+   blocking**) · `integration` (real Qdrant/Redis/DynamoDB service containers; key-gated tests
+   auto-skip). The `security` gate went red on 2026-08-08, when new advisories were published
+   against urllib3, cryptography, h2, pyjwt and Next.js (three critical RCEs); upgrades on
+   2026-10-07 cleared them.
    The gate (`evaluation.aggregator.gate`) blocks a merge if NDCG@3/MRR regress past tolerance
    **or** if our ordering stops beating Google Shopping's own order. It reads recorded fixtures,
    so it needs no services, no keys, and spends no paid SerpApi quota. The static-catalog gate
    needs a seeded Qdrant + `OPENAI_API_KEY`, so it stays local (`make eval-gate`).
    A separate `kind` workflow installs the chart on a fresh kind cluster for every change to the
    chart or the images (lint, Pod Security `restricted`, readiness, a smoke test; no API keys).
-   It was added on 2026-10-07 and validated locally; it hasn't run on GitHub yet.
+   Its first GitHub run, on 2026-10-07, passed.
    **CD is a skeleton and has never been executed** (0 runs): tag-triggered, OIDC → AWS (no
    long-lived keys) → build/push both images to ECR → `helm upgrade --install` against EKS.
    Argo CD runs on kind (Phase 6); the EKS deploy step still calls Helm directly.

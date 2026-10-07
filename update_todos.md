@@ -1,6 +1,6 @@
 # Update TODOs: P2 ProductIQ (Enterprise2)
 
-> **As of:** 2026-10-07 · **HEAD:** `56b28de` · branch `main` · 62 commits · 🆕 Phase 6 built and verified (6A–6I); waiting on you: Clerk sign-in, 9 commits + push, first CI run
+> **As of:** 2026-10-07 · **HEAD:** `ebd44d6` on `origin` (your commit of this file; `mirror` is at `8ff4c76`) · branch `main` · 72 commits · 🆕 **Phase 6 ✅ complete** (9 commits pushed, `kind` CI green). Two follow-up commits ready locally (§10 D-16, D-19)
 > **How this was built:** I checked every status below against the repo today: code, `ci.yml`,
 > `git log`, a live `pytest --collect-only`, and the reports in `Document/docs/`. When a doc and
 > the code disagree, the code wins, and the mismatch goes in **§10 Drift & bugs**. Vendor prices and
@@ -56,21 +56,21 @@ A status can be followed by a **note**:
 | 4B Inspection → remediation | 🔄 | 27 findings: 26 fixed, **M-12 partial** |
 | 4C Honesty / cleanup pass | ✅ | Jul 28 – Aug 8 commits |
 | 5 Hardening | 🔄 | Audits done. **Trivy, bandit-in-CI and ESO are claimed but not real** (§5) |
-| **6 kind** | 🔄 | 🆕 6.1 ✅ · 6A cluster ✅ · 6B chart structure ✅ · 6C chart hardening ✅ · 6D per-env wiring ✅ · 6E add-ons + first deploy 🔄 (browser sign-in pending) · 6F monitoring ✅ · 6G GitOps ✅ (Argo CD manages p2) · 6H drills ✅ (8/8) · 6I CI + evidence ✅ (CI's first GitHub run pending your push) · nothing committed yet. `make kind-all` from zero: 595 s. First install 2026-10-07: release `p2` deployed; smoke 7/7 (devauth) and 4/4 (clerk) |
+| **6 kind** | ✅ | 🆕 6.1 ✅ · 6A cluster ✅ · 6B chart structure ✅ · 6C chart hardening ✅ · 6D per-env wiring ✅ · 6E add-ons + first deploy ✅ · 6F monitoring ✅ · 6G GitOps ✅ (Argo CD manages p2) · 6H drills ✅ (8/8) · 6I CI + evidence ✅ · 9 commits `1d0c843`…`8ff4c76` pushed 2026-10-07; `kind` workflow green on its first GitHub run. `make kind-all` from zero: 595 s. First install 2026-10-07: release `p2` deployed; smoke 7/7 (devauth) and 4/4 (clerk) |
 | **7 DigitalOcean DOKS** | ⏳ | New. Blocked on decision 7.0 (credit status, history store) |
 | **8 AWS EKS** | 🔄 | Terraform validates and a `tfplan` exists. **Never applied; `cd.yml` has 0 runs** |
 | **9 Portfolio** | 🔄 | Writeup exists but is **pre-pivot** (says 83 tests, no aggregator) |
-| Drift & bugs found today | ⏳ | 🆕 15 items (11 + 4 found in the Phase 6 session), mostly cheap and offline (§10) |
+| Drift & bugs found today | ⏳ | 🆕 20 items (11 + 9 found in the Phase 6 session; D-16 and D-19 fixed locally, awaiting your commit), mostly cheap and offline (§10) |
 | Roadmap | ⏳ | 9 items (§11) |
 
 ## 0.1 Do next (priority order)
 
-1. 🆕 **Sign in with Clerk** at http://app.localhost and run one search (the cluster is up, clerk profile).
-2. 🆕 **Commit Phase 6 as nine commits:** `pwsh -File Document\phase6-snapshots\commit_phase6.ps1` (rehearsed
-   on a clone: 9 commits, no trailers, tree unchanged). ⚠️ Not the older 4- or 5-commit sequences.
-   Then push `origin` and `mirror`, and watch the new `kind` workflow's first run.
-3. 🆕 **When done with the cluster:** `make kind-down` (frees ~5.7 GB of the Docker VM).
-4. **§10 drift fixes.** One sitting, offline, $0 (🆕 now 15 items).
+1. 🆕 **Commit + push the two follow-up commits** (D-16 dependency fixes, D-19 `kind-up`), then confirm the
+   `CI` workflow on `origin` is green for the first time since 2026-08-08.
+2. 🆕 **Unlock GitHub Actions on the mirror account** (§10 D-17): `ghourimartin` is locked over a billing
+   issue, so no job there has run since July. Fix the billing, or disable Actions on that repo.
+3. 🆕 **Decide on Tailwind v4** (§10 D-18): the remaining npm advisories are build-time only.
+4. **§10 drift fixes.** One sitting, offline, $0 (🆕 now 20 items, 2 already fixed).
 5. **Add Trivy + bandit to CI (§5).** `hardening.md` says CI runs them. It doesn't.
 6. **Decision 7.0.** Check whether your DO credit still exists (it probably doesn't). Pick a budget or vendor.
 7. **Phase 7: DOKS.** First real cluster: real load balancer, storage, DNS, TLS, GitOps, alerting, backups.
@@ -331,7 +331,9 @@ A status can be followed by a **note**:
 - ⏳ 18.5 `cd.yml` has **0 runs**. See Phase 8.4.
 - ⏳ ✂️ 18.6 Planned CI items not built: Docker image build, **Trivy scan**, ECR push in CI, ArgoCD / Argo Rollouts.
   Argo CD gets built in 6.5 / 7.3, and Rollouts in 7.6.
-- ⏳ 18.7 Missing from CI: `bandit`, `helm lint`, `terraform validate`, and a kind install test (6.8).
+- 🔄 18.7 Missing from CI: `bandit`, `helm lint`, `terraform validate`, and a kind install test (6.8).
+  🆕 The `kind` workflow (6I) adds the install test and `helm lint` (via `ct lint`, when chart or image
+  files change). Still missing: `bandit`, `terraform validate`.
   🆕 The new chart contract tests (`tests/unit/test_helm_chart.py`) run under pytest, so CI exercises the chart if its runner has helm (not verified).
 
 ---
@@ -429,11 +431,12 @@ A status can be followed by a **note**:
 - ⏳ 5.2 Add `bandit -r packages apps` to the CI `security` job.
 - ⏳ 5.3 Add an `image-scan` CI job: `docker build` api + web → `aquasecurity/trivy-action`
   (fail on CRITICAL; HIGH as report-only until M-12 closes).
-- ⏳ 5.4 Add `helm lint` + `terraform validate` (`-backend=false`) to CI. Cheap, no cloud needed. 🆕 Locally, `make helm-lint` now lints each environment (strict).
+- 🔄 5.4 Add `helm lint` + `terraform validate` (`-backend=false`) to CI. Cheap, no cloud needed. 🆕 Locally, `make helm-lint` now lints each environment (strict).
+  🆕 `helm lint` runs in CI since 6I (`ct lint` in the `kind` workflow); `terraform validate` is still missing.
 
 ---
 
-## Phase 6: Deployment using kind 🔄 ($0, local)
+## Phase 6: Deployment using kind ✅ ($0, local; completed 2026-10-07)
 
 > **What kind is:** *Kubernetes IN Docker*. Each "node" is a Docker container on **your one machine**.
 > It runs the real Kubernetes API, scheduler and kubelet, so manifests, Helm charts, RBAC,
@@ -449,15 +452,15 @@ A status can be followed by a **note**:
 
 | Sub-step | Todo IDs | Status |
 |---|---|---|
-| **6A** Cluster + environment risks | 6.2, 6.3, 6.5.8 | ✅ verified · not yet committed |
-| **6B** Chart structure | 6.4.1, 6.4.3, 6.4.8, 6.4.9, 6.4.12 + F2, F3 | ✅ verified · not yet committed |
-| **6C** Chart hardening | 6.4.4–6.4.7 + F5, F8, F9, F13, F14 | ✅ verified · not yet committed |
-| **6D** Per-environment wiring | 6.4.2, 6.4.10, 6.4.11 + F4, F6, F7, F15 | ✅ verified · not yet committed |
-| **6E** Add-ons + first deploy | 6.2.3, 6.3.3, 6.5.1–6.5.3, 6.5.6, 6.6.1–6.6.4 + F17–F20 | 🔄 verified on kind · browser sign-in pending · not yet committed |
-| **6F** Monitoring | 6.5.4, 6.6.5 + F21–F24 | ✅ verified · not yet committed |
-| **6G** GitOps | 6.5.5 + F18, F25–F28 | ✅ verified · not yet committed |
-| **6H** Drills | 6.7.1–6.7.8 + F29–F32 | ✅ 8/8 verified · not yet committed |
-| **6I** CI, evidence, teardown | 6.8, 6.9 + F33 | ✅ verified locally · CI's GitHub run after your push · not yet committed |
+| **6A** Cluster + environment risks | 6.2, 6.3, 6.5.8 | ✅ verified · commit `1d0c843` |
+| **6B** Chart structure | 6.4.1, 6.4.3, 6.4.8, 6.4.9, 6.4.12 + F2, F3 | ✅ verified · commit `f62df5a` |
+| **6C** Chart hardening | 6.4.4–6.4.7 + F5, F8, F9, F13, F14 | ✅ verified · commit `f008279` |
+| **6D** Per-environment wiring | 6.4.2, 6.4.10, 6.4.11 + F4, F6, F7, F15 | ✅ verified · commit `68b410c` |
+| **6E** Add-ons + first deploy | 6.2.3, 6.3.3, 6.5.1–6.5.3, 6.5.6, 6.6.1–6.6.4 + F17–F20 | ✅ verified · Clerk sign-in confirmed by you · commit `28608f6` |
+| **6F** Monitoring | 6.5.4, 6.6.5 + F21–F24 | ✅ verified · commit `83ae254` |
+| **6G** GitOps | 6.5.5 + F18, F25–F28 | ✅ verified · commit `171b211` |
+| **6H** Drills | 6.7.1–6.7.8 + F29–F32 | ✅ 8/8 verified · commit `4553c00` |
+| **6I** CI, evidence, teardown | 6.8, 6.9 + F33 | ✅ verified · `kind` CI green on GitHub · commit `8ff4c76` |
 
 ### 🆕 Findings: F1–F16 from the chart recon (before any install), F17–F20 from the first install (6E)
 
@@ -502,11 +505,11 @@ A status can be followed by a **note**:
 - ✅ 6.1.2 `/health` 200, `/aggregate` live offers, `/chat` SSE, Jaeger / Prometheus / Grafana / Langfuse reachable.
 - 🆕 The compose stack is stopped while Phase 6 runs (`make down` keeps the volumes; `make full` brings it back).
 
-### 6.2 Tooling 🔄
-- 🔄 6.2.1 Install `kind`, `kubectl`, `helm`, `k9s` (optional), `kubectx`/`kubens` (optional).
+### 6.2 Tooling ✅
+- ✅ 6.2.1 Install `kind`, `kubectl`, `helm`, `k9s` (optional), `kubectx`/`kubens` (optional).
   - ✅ 🆕 kind v0.32.0 · kubectl v1.36.1 · helm **v4.1.4** · kubeconform v0.7.0.
   - 🆕 Helm 4 changes: `--atomic` is deprecated (use `--rollback-on-failure`); `--wait` now defaults to `hookOnly`.
-  - ⏳ k9s (optional) · ⏳ kubectx/kubens (optional).
+  - ⏸️ k9s (optional) · ⏸️ kubectx/kubens (optional): not needed; `kubectl --context` was enough.
   - 🆕 sops / age / kubeseal aren't needed (secrets decision in 6.5.6).
 - ✅ 🔁 6.2.2 Docker memory. The plan said give it ≥ 10–12 GB. 🆕 Decided instead: keep the 8 GB cap,
   stop compose during kind work, keep add-ons lean, measure after each install.
@@ -603,7 +606,7 @@ A status can be followed by a **note**:
   - ✅ 🆕 6.4.25 F17: `enableServiceLinks: false` on all six pod templates and `WEB_PORT` set from `web.port`;
     4 new contract tests; chart 0.5.0. A render of the 6D chart has none of these lines (negative control). (6E)
 
-### 6.5 Platform add-ons on kind 🔄 (the same set goes on DOKS in 7.3)
+### 6.5 Platform add-ons on kind ✅ (the same set goes on DOKS in 7.3)
 - ✅ 6.5.1 **metrics-server** (kind needs `--kubelet-insecure-tls`). Needed for the HPA.
   🆕 Chart 3.14.0 (app 0.9.0), installed in 34 s; `kubectl top` works; the api HPA reads `cpu: 1%/70%`. (6E)
 - ✅ 6.5.2 **Envoy Gateway** (Gateway API): `GatewayClass` → `Gateway` → `HTTPRoute`s for `app.localhost` / `api.localhost`.
@@ -658,12 +661,13 @@ A status can be followed by a **note**:
     printed. Server-side apply, so no `last-applied-configuration` annotation holds plaintext; base64
     `data`, so a profile switch removes the keys it drops. Refuses non-kind contexts. 15 unit tests. (6E)
   - ✅ 🆕 The type gate (`make type` and CI) now covers `ops/` and `infra/`. (6E)
-- ⏳ 6.5.7 *(Optional)* OTel Collector + Jaeger operator, Loki + Grafana Alloy for logs.
+- ⏸️ 6.5.7 *(Optional)* OTel Collector + Jaeger operator, Loki + Grafana Alloy for logs. 🆕 Skipped on kind (8 GB VM);
+  covered on DOKS by 7.3.9.
 - ✅ 6.5.8 **NetworkPolicy enforcement test.** 🆕 kind's default CNI (kindnet) enforces ingress policy: `ok`
   before a default-deny, 3/3 timeouts after (`infra/kind/netpol-probe*.yaml`). No Calico or Cilium needed.
   Egress not tested yet.
 
-### 6.6 Deploy the app 🔄
+### 6.6 Deploy the app ✅
 - ✅ 6.6.1 Create Secrets (6.5.6). Use `AUTH_DEV_BYPASS=false` and real Clerk dev keys.
   - ✅ 🆕 Decided: **both profiles.** A make target builds the Secret as `PROFILE=clerk` (APP_ENV=dev,
     real Clerk RS256; used for the 6E browser smoke test) or `PROFILE=devauth` (APP_ENV=local, no
@@ -680,7 +684,7 @@ A status can be followed by a **note**:
 - ✅ 6.6.3 Seed Job completes. Qdrant `products` = 9 points. 🆕 It's a post-install hook (6.4.10).
   🆕 Verified: `indexed 9 products into Qdrant (hybrid dense+sparse)`; `products` = 9 points, status green
   (read from an api pod); the Job deleted itself on success.
-- 🔄 6.6.4 Smoke: `/health`, `/recommend`, `/chat` SSE through the Gateway. **At most 1** live `/aggregate`.
+- ✅ 6.6.4 Smoke: `/health`, `/recommend`, `/chat` SSE through the Gateway. **At most 1** live `/aggregate`.
   🆕 Wait for ready EndpointSlices and retry before declaring failure.
   - ✅ 🆕 `make kind-smoke` (`ops/smoke/smoke.py`). devauth **7/7**: web, health, 401 without a token,
     `/recommend`, `/chat` SSE, history stored and deleted (DynamoDB), and 1 live `/aggregate` (3 offers in
@@ -689,7 +693,7 @@ A status can be followed by a **note**:
   - ✅ 🆕 SSE streams through Envoy: first event at 0.09 s of 2.9 s, matching a direct-to-pod run. (The first
     smoke run's SSE parser buffered the stream on the client side; per-event timing found it; fixed.)
   - ✅ 🆕 `make kind-addons` re-run on the live cluster: exit 0 in 47 s, nothing changed (idempotent).
-  - ⏳ 🆕 Browser: sign in with Clerk at http://app.localhost and run one search.
+  - ✅ 🆕 Browser: sign in with Clerk at http://app.localhost and run one search. Confirmed by you, 2026-10-07.
 - ✅ 6.6.5 Grafana shows api metrics; the `ApiDown` alert fires when api is scaled to 0.
   🆕 Drill: api to 0 → `ApiDown` pending 10 s later → firing at 2 min (its `for`) → Alertmanager → the
   sink logged it; back to 2 replicas (Ready in 6 s) → resolved notification ~2 min later. This only
@@ -729,14 +733,15 @@ no user hits the rate limit), failing on any non-200; `MODE=cold` makes every qu
   - ✅ 🆕 **10/10 as designed:** api → Redis/Qdrant/DynamoDB open; web → Redis/api/Qdrant blocked; a pod in
     another namespace → Redis/Qdrant/api blocked; Gateway → web/api HTTP 200.
 
-### 6.8 CI: install test on kind 🔄
+### 6.8 CI: install test on kind ✅
 - ✅ 🔁 6.8.1 New CI job: `helm/kind-action` + `helm/chart-testing` (`ct lint` + `ct install`). Every PR proves the chart installs.
   🆕 `.github/workflows/kind.yml`: `ct lint`, then a scripted install instead of `ct install` (the chart needs
   a pre-existing Secret and images built in the job): Helm 4.1.4 pinned, a Pod Security `restricted` namespace,
   `--rollback-on-failure --wait=watcher`, then a smoke test. CI values in `ci/kind-values.yaml`.
   - ✅ Validated locally: actionlint 1.7.12 clean; `ct lint` v3.15.0 passes (after F33); the same steps on a
     fresh kind cluster: installed in 116 s, 0 warnings, health OK, 401 without a token, web 200.
-  - ⏳ Its first GitHub run (after your push).
+  - ✅ 🆕 First GitHub run on `origin` passed (run 37576905595, `8ff4c76`): lint, cluster, image builds,
+    restricted install and smoke all green. The mirror's run never started (account locked, §10 D-17).
 - ✅ 6.8.2 Keep it cheap: offline mode, no SerpApi, no LLM keys (dev-auth profile scoped to CI).
   🆕 A dummy dev-auth Secret; with no OpenAI key `/recommend` still answers from the popularity fallback
   (3 products), which the job asserts.
@@ -752,10 +757,13 @@ no user hits the rate limit), failing on any non-200; `MODE=cold` makes every qu
   what bit and the fixes, memory. The README's deployment section is corrected (no ALB Ingress; Argo CD).
 - ✅ 6.9.3 `kind delete cluster --name p2` (🆕 `make kind-down`).
   🆕 Exercised twice, then rebuilt from zero: `make kind-all` **595 s** (smoke 4/4), `make kind-argocd` 97 s,
-  43 pods Ready, 5.7 GB. The cluster is left running (clerk profile) for your sign-in.
+  43 pods Ready, 5.7 GB. Deleted by you with `make kind-down` after the sign-in (2026-10-07).
 - **Exit criteria:** one script/Make target goes from no cluster to a smoke-tested app; every drill in 6.7
   passes; the CI kind job is green. 🆕 Lint green for all 3 values files: ✅ already.
-  - ✅ 🆕 One target from zero: `make kind-all`. ✅ Every drill in 6.7 passes. ⏳ CI kind job green: after your push.
+  - ✅ 🆕 One target from zero: `make kind-all`. ✅ Every drill in 6.7 passes. ✅ CI kind job green (2026-10-07).
+  - 🆕 `make kind-all` failed at its first step when the cluster already existed (`kind create` refuses), so
+    "each step re-runs safely" in the runbook wasn't true for `kind-up`. ✅ Fixed: `kind-up` now skips an
+    existing cluster (tested in cmd.exe and Git Bash); awaiting your commit (§10 D-19).
 
 ---
 
@@ -984,6 +992,11 @@ aggregator, no remediation story.
 | 🆕 D-13 | `.env`, Step 6.5, D19 | `ANTHROPIC_API_KEY` is now set, so "the Anthropic leg was never called live (no key)" and "the judge is gpt-4o because there's no Anthropic key" are stale | Make one live fallback call to close 6.5; decide whether to move the judge off-family | 15 min |
 | 🆕 D-14 | `.github/workflows/cd.yml:50-56` | `helm upgrade --install ... --wait --atomic`: `--atomic` is deprecated in Helm 4 (use `--rollback-on-failure`), and `cd.yml` doesn't pin Helm, so the runner image decides v3 vs v4 | Pin Helm with `azure/setup-helm`; switch to `--rollback-on-failure` once on Helm 4 | 10 min |
 | 🆕 D-15 | `Makefile` (`wait-api`, `urls`, `upv`, `full`, `bootstrap`) | Their recipes use sh syntax (`set -a; . ./.env`, `$$(seq …)`). Run from PowerShell, GNU make finds no sh.exe and uses cmd.exe, so they fail (F19; inferred from the 6E probe, not run) | Run them from Git Bash, or move the logic into a script like the kind targets | 15 min |
+| 🆕 D-16 | `uv.lock`, `apps/web/package*.json`, `ci.yml` | **`CI` has been red on `origin` since 2026-08-08** (the README said "currently green"): the blocking `pip-audit` found 21 new advisories in urllib3 2.7.0, cryptography 49.0.0, h2 4.4.0 and pyjwt 2.13.0. Behind it, never reached: `npm audit` had **3 critical RCEs in `next` 16.2.12** (in the shipped image) plus build-tool highs | ✅ Fixed locally 2026-10-07: urllib3 2.8.0, cryptography 50.0.2, h2 4.4.1, pyjwt 2.15.1 (floor raised in `pyproject.toml`); next 16.3.8 + sharp 0.35.5 and 4 other npm patches. pip-audit on Linux: 0 found (the old lock reproduces CI's 21); `npm audit --omit=dev`: 0. 197 tests, eval gate, `tsc`, `next build`, both images build and run. ⏳ Commit + push, then confirm `CI` green | done |
+| 🆕 D-17 | GitHub account `ghourimartin` (the mirror) | Every Actions job on the mirror fails in seconds: "The job was not started because your account is locked due to a billing issue." Every mirror run since July is red | **You:** fix the payment/billing issue on that account, or disable Actions on the mirror repo | 5 min |
+| 🆕 D-18 | `apps/web` (Tailwind CSS 3.4.19) | 5 high + 2 moderate npm advisories remain (braces, chokidar, micromatch, fast-glob, postcss-*), all build-time only via Tailwind v3; npm's only fix is Tailwind v4 (breaking). The CI npm gate now audits runtime deps (`--omit=dev`), like the Python gate | Migrate to Tailwind v4 and check every page visually; then `npm audit` is clean without `--omit=dev` | 1–2 h |
+| 🆕 D-19 | `Makefile` `kind-up` | `make kind-all` stopped at step 1 when the cluster already existed, though the runbook says each step re-runs safely | ✅ Fixed locally: `kind-up` skips an existing cluster (cmd.exe + Git Bash tested). ⏳ Commit | done |
+| 🆕 D-20 | `Makefile` `KUBECONFORM` | kubeconform downloads schemas from GitHub on every run; one run of `make helm-lint` reported `Errors: 1` from a failed fetch, and the re-runs were all valid | Add `-cache` with a local schema dir, so lint doesn't depend on the network | 10 min |
 
 ---
 
