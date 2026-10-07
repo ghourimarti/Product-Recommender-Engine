@@ -1,0 +1,28 @@
+# The app on kind, as Argo CD manages it: the same chart and values file as `make kind-deploy`, plus
+# release.yaml, which carries the image tag (written by `make kind-gitops`; on a real cluster, CI).
+# Automated sync with self-heal: a manual change in the cluster is reverted to what git says.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: p2
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git://git-server.argocd.svc.cluster.local/p2.git
+    targetRevision: main
+    path: ops/helm/p2-recommender
+    helm:
+      releaseName: p2
+      valueFiles:
+        - values-kind.yaml
+        - ../../argocd/kind/release.yaml # relative to the chart: ops/argocd/kind/release.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: p2
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true # the same apply mode as Helm 4, so the handover changes no fields

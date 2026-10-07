@@ -3,7 +3,8 @@
         serve build-backend \
         db services app obs observability langfuse full up upv \
         ps logs down downv seed bootstrap urls wait-api \
-        alerts-test helm-lint kind-up kind-down kind-addons kind-images kind-secret kind-deploy kind-smoke
+        alerts-test helm-lint kind-up kind-down kind-addons kind-images kind-secret kind-deploy \
+        kind-argocd kind-gitops kind-smoke
 
 # ─── Layered local stack ──────────────────────────────────────────────────────
 #   db             = data stores only    (Qdrant + DynamoDB-local + Redis)
@@ -234,10 +235,15 @@ PROFILE      ?= clerk
 KUBECTL      := kubectl --context $(KIND_CONTEXT)
 include infra/kind/addons/versions.env
 
-# One tag for both images: the commit's short SHA, plus -dirty when the image inputs have
-# uncommitted changes, so a tag never claims to be a commit it isn't.
-IMAGE_INPUTS := apps packages data pyproject.toml uv.lock
-IMAGE_TAG    ?= $(shell git rev-parse --short HEAD)$(if $(shell git status --porcelain -- $(IMAGE_INPUTS)),-dirty)
+# One tag for both images (infra/kind/image_tag.py): the commit's short SHA, plus a hash of the
+# uncommitted image inputs when there are any. A tag never claims to be a commit it isn't, and
+# never names two different builds (a reused tag means Kubernetes sees nothing to roll out).
+# Computed once, and only for the targets that use it; IMAGE_TAG=... on the command line wins.
+ifndef IMAGE_TAG
+ifneq ($(filter kind-images kind-deploy kind-argocd kind-gitops kind-all,$(MAKECMDGOALS)),)
+IMAGE_TAG := $(shell uv run python infra/kind/image_tag.py)
+endif
+endif
 
 kind-up:        ## Phase 6: create the kind cluster (1 control-plane + 2 workers, pinned image)
 	kind create cluster --name $(KIND_CLUSTER) --config infra/kind/kind-config.yaml
@@ -278,10 +284,33 @@ kind-images:    ## Phase 6: build api + web at IMAGE_TAG and load them into the 
 kind-secret:    ## Phase 6: (re)create p2-secrets from a filtered .env (PROFILE=clerk|devauth); restarts the api
 	uv run python infra/kind/kind_secret.py --profile $(PROFILE) --namespace $(KIND_NS) --context $(KIND_CONTEXT)
 
-kind-deploy:    ## Phase 6: install or upgrade the chart at IMAGE_TAG (after kind-images + kind-secret)
+kind-deploy:    ## Phase 6: install or upgrade the chart at IMAGE_TAG with Helm (before kind-argocd)
 	helm upgrade --install p2 $(HELM_CHART) -n $(KIND_NS) --kube-context $(KIND_CONTEXT) \
 	  -f $(HELM_CHART)/values-kind.yaml --set-string image.tag=$(IMAGE_TAG) \
 	  --rollback-on-failure --wait=watcher --timeout 10m
+
+#   GitOps (step 6G). kind-argocd installs Argo CD and an in-cluster git server, pushes the chart
+#   and the apps there, and hands the release from Helm to Argo CD: only Helm's release record is
+#   deleted, the running objects stay and Argo CD adopts them. From then on, deploy with
+#   `make kind-images kind-gitops` (build, load, push): don't mix in kind-deploy, or Helm and Argo
+#   CD fight over the same objects.
+kind-argocd:    ## Phase 6: Argo CD (pinned) + in-cluster git server; hand p2 over from Helm to GitOps
+	helm upgrade --install argocd argo-cd --repo https://argoproj.github.io/argo-helm \
+	  --version $(ARGO_CD_VERSION) -n argocd --create-namespace -f infra/kind/addons/argo-cd.yaml \
+	  --kube-context $(KIND_CONTEXT) --wait=watcher --timeout 10m
+	docker build -q -t p2-git-server:alpine3.22 infra/kind/gitops
+	kind load docker-image --name $(KIND_CLUSTER) p2-git-server:alpine3.22
+	$(KUBECTL) apply -f infra/kind/gitops/git-server.yaml
+	$(KUBECTL) -n argocd rollout status deployment/git-server --timeout=180s
+	uv run python infra/kind/gitops_push.py --tag $(IMAGE_TAG) --context $(KIND_CONTEXT)
+	$(KUBECTL) -n $(KIND_NS) delete secret -l owner=helm,name=p2 --ignore-not-found
+	$(KUBECTL) apply -f ops/argocd/kind/root.yaml
+	$(KUBECTL) -n argocd wait --for=create application/p2 --timeout=180s
+	$(KUBECTL) -n argocd wait --for=jsonpath={.status.sync.status}=Synced application/p2 --timeout=600s
+	$(KUBECTL) -n argocd wait --for=jsonpath={.status.health.status}=Healthy application/p2 --timeout=600s
+
+kind-gitops:    ## Phase 6: push the chart + IMAGE_TAG to the in-cluster git server; Argo CD deploys it
+	uv run python infra/kind/gitops_push.py --tag $(IMAGE_TAG) --context $(KIND_CONTEXT)
 
 kind-smoke:     ## Phase 6: smoke-test through the Gateway; AGGREGATE=1 spends one live SerpApi search
 	uv run python ops/smoke/smoke.py --auth-mode $(PROFILE) $(if $(AGGREGATE),--aggregate)

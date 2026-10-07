@@ -12,5 +12,7 @@ type: application
 # 0.6.0: monitoring (ServiceMonitor, PrometheusRule, Grafana dashboards) from files/, shared with
 #        compose; ApiDown also fires with zero replicas; pod templates drop the chart/app version
 #        labels, so a chart bump no longer restarts every pod.
-version: 0.6.0
+# 0.7.0: the seed Job is idempotent (--skip-if-current: re-indexes only when the catalog changed),
+#        so it runs after upgrades too and on every Argo CD sync without blanking the catalog.
+version: 0.7.0
 appVersion: "0.1.0"

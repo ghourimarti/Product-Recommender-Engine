@@ -1,0 +1,6 @@
+# The image tag Argo CD deploys on kind. `make kind-gitops` writes the tag of your latest
+# `make kind-images` into the copy it pushes to the in-cluster git server. This committed copy stays
+# empty on purpose: a repo without a real tag fails loudly ("image.tag is required") instead of
+# deploying something stale. On a real cluster, CI writes this file after it pushes the images.
+image:
+  tag: ""

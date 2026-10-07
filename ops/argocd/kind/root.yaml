@@ -1,0 +1,24 @@
+# The root of the app-of-apps on kind (todo 6.5.5). Argo CD syncs every Application under
+# ops/argocd/kind/apps/ from git; this one object is applied by hand (`make kind-argocd`), and
+# everything after it comes from git.
+#
+# repoURL is the in-cluster git server (infra/kind/gitops/git-server.yaml) until the Phase 6 work
+# is pushed. To sync from GitHub instead, change repoURL here and in apps/p2.yaml; nothing else.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git://git-server.argocd.svc.cluster.local/p2.git
+    targetRevision: main
+    path: ops/argocd/kind/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

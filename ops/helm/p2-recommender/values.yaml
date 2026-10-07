@@ -81,7 +81,7 @@ api:
   securityContext:
     runAsUser: 10001 # the image's appuser. Numeric on purpose: the image sets USER by name.
     runAsGroup: 10001
-    readOnlyRootFilesystem: true # writes go to an emptyDir at /tmp (fastembed's model cache)
+    readOnlyRootFilesystem: true # scratch writes go to an emptyDir at /tmp; models are baked in
   serviceAccount:
     create: true
     name: p2-api
@@ -185,7 +185,9 @@ dynamodbLocal:
 # Post-install Job that indexes the product catalog into Qdrant (the in-cluster `make seed`).
 seed:
   enabled: true
-  onUpgrade: false # the indexer recreates the collection; see the template before turning this on
+  # Also run after upgrades. The Job skips unless the catalog changed, and the catalog ships in
+  # the api image, so an upgrade that changes it gets re-indexed (see the template).
+  onUpgrade: true
   resources:
     requests:
       cpu: 250m

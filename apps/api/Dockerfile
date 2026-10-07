@@ -36,6 +36,17 @@ COPY --from=builder /app/.venv /app/.venv
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 COPY data/ ./data/
+# Bake the local model files in (finding F18). Before, every new pod downloaded the BM25 sparse
+# model from the Hugging Face Hub and tiktoken's encoding on its first request, after it already
+# reported Ready (23 s on kind), so huggingface.co was a runtime dependency. The env vars point
+# both libraries at these copies; HF_HUB_OFFLINE stops runtime calls to the Hub. The reranker is
+# off by default and not baked: enabling it means adding BAAI/bge-reranker-base here.
+ENV FASTEMBED_CACHE_PATH=/app/.cache/fastembed \
+    TIKTOKEN_CACHE_DIR=/app/.cache/tiktoken
+RUN python -c "from core.embeddings import get_sparse_embeddings; get_sparse_embeddings()" \
+    && python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')" \
+    && chmod -R a+rX /app/.cache
+ENV HF_HUB_OFFLINE=1
 USER appuser
 EXPOSE ${API_PORT}
 # Shell form so ${API_PORT} is expanded at container start (docker exec uses /bin/sh -c).

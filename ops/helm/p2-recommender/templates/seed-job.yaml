@@ -1,7 +1,10 @@
 {{- if .Values.seed.enabled }}
-{{- /* Indexes the product catalog into Qdrant: the in-cluster `make seed`. It runs once, after the
-first install. The indexer recreates the collection, so re-running it on every upgrade would
-briefly empty the catalog mid-rollout. Re-seed deliberately with --set seed.onUpgrade=true. */}}
+{{- /* Indexes the product catalog into Qdrant: the in-cluster `make seed`. --skip-if-current makes
+it a no-op unless the catalog changed (each point carries the catalog file's fingerprint), so it
+is safe after every install and upgrade, and on every Argo CD sync (Argo CD runs post-install
+hooks on each sync). The catalog file ships in the api image, so an upgrade that changes it is
+re-indexed here. While a changed catalog re-indexes, the collection is briefly rebuilt;
+alias-swapping a fresh collection would remove that window (not built yet). */}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -36,7 +39,7 @@ spec:
         - name: seed
           image: {{ include "p2.image" (dict "image" .Values.api.image "root" .) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["python", "-m", "retrieval.index"]
+          command: ["python", "-m", "retrieval.index", "--skip-if-current"]
           envFrom:
             - secretRef:
                 name: {{ .Values.secretName }}
@@ -48,7 +51,7 @@ spec:
           securityContext:
             {{- include "p2.containerSecurityContext" .Values.api.securityContext | nindent 12 }}
           volumeMounts:
-            - name: tmp # fastembed downloads its BM25 model here
+            - name: tmp # scratch space; the BM25 model and tokenizer are baked into the image
               mountPath: /tmp
       volumes:
         - name: tmp

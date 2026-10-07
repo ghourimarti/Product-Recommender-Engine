@@ -29,16 +29,16 @@ class VectorStore(Protocol):
     def max_dense_similarity(self, query_vector: list[float]) -> float: ...
 
 
-def _product_to_document(product: Product) -> Document:
-    return Document(
-        page_content=product.combined_text,
-        metadata={
-            "product_id": product.product_id,
-            "title": product.title,
-            "avg_rating": product.avg_rating,
-            "review_count": product.review_count,
-        },
-    )
+def _product_to_document(product: Product, catalog: str = "") -> Document:
+    metadata: dict[str, Any] = {
+        "product_id": product.product_id,
+        "title": product.title,
+        "avg_rating": product.avg_rating,
+        "review_count": product.review_count,
+    }
+    if catalog:
+        metadata["catalog"] = catalog  # fingerprint of the catalog file this point came from
+    return Document(page_content=product.combined_text, metadata=metadata)
 
 
 def _to_retrieved(doc: Document, score: float) -> RetrievedProduct:
@@ -63,8 +63,33 @@ class QdrantHybridStore:
         self._store: Any = None
         self._client: Any = None
 
-    def index(self, products: list[Product]) -> None:
-        documents = [_product_to_document(p) for p in products]
+    def _qdrant(self) -> Any:
+        if self._client is None:
+            self._client = QdrantClient(
+                url=self._settings.qdrant_url, api_key=self._settings.qdrant_api_key or None
+            )
+        return self._client
+
+    def holds_catalog(self, catalog: str, size: int) -> bool:
+        """True when the collection holds exactly `size` points, all stamped with `catalog`.
+
+        Lets the seed Job run on every deploy without rebuilding an up-to-date collection
+        (Argo CD runs Helm post-install hooks on every sync, and `index` recreates the collection).
+        """
+        client = self._qdrant()
+        if not client.collection_exists(self._settings.qdrant_collection):
+            return False
+        points, _ = client.scroll(
+            collection_name=self._settings.qdrant_collection,
+            limit=size + 1,
+            with_payload=True,
+            with_vectors=False,
+        )
+        stamps = {(point.payload or {}).get("metadata", {}).get("catalog") for point in points}
+        return len(points) == size and stamps == {catalog}
+
+    def index(self, products: list[Product], catalog: str = "") -> None:
+        documents = [_product_to_document(p, catalog) for p in products]
         self._store = QdrantVectorStore.from_documents(
             documents=documents,
             embedding=self._dense,
@@ -104,11 +129,7 @@ class QdrantHybridStore:
         Measured on this catalog: on-topic queries 0.47-0.55; off-topic (refrigerator, tyres,
         gibberish) 0.04-0.17 — hence the default threshold of 0.30.
         """
-        if self._client is None:
-            self._client = QdrantClient(
-                url=self._settings.qdrant_url, api_key=self._settings.qdrant_api_key or None
-            )
-        response = self._client.query_points(
+        response = self._qdrant().query_points(
             collection_name=self._settings.qdrant_collection,
             query=query_vector,
             using="",  # the unnamed dense vector (sparse is "langchain-sparse")

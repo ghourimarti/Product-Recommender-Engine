@@ -1,0 +1,128 @@
+# A throwaway git server for practising GitOps on kind (todo 6.5.5). It stands in for GitHub until
+# the Phase 6 work is pushed: `make kind-gitops` copies the chart and the Argo CD apps from the
+# working tree into a deploy repo and pushes it here (infra/kind/gitops_push.py); Argo CD syncs
+# from here. Repos live in an emptyDir, so a restart empties the server: push again.
+# Reads and pushes are anonymous, so only Argo CD's repo server may connect (NetworkPolicy below).
+# Pushes from your machine go through kubectl port-forward, which NetworkPolicies don't see.
+apiVersion: v1
+kind: Service
+metadata:
+  name: git-server
+  namespace: argocd
+spec:
+  selector:
+    app.kubernetes.io/name: git-server
+  ports:
+    - name: git
+      port: 9418
+      targetPort: git
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: git-server
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: git-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: git-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: git-server
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: init-repo
+          image: p2-git-server:alpine3.22 # built and loaded by `make kind-argocd` (Dockerfile here)
+          imagePullPolicy: Never
+          command: ["git", "init", "--quiet", "--bare", "--initial-branch=main", "/srv/git/p2.git"]
+          env:
+            - name: HOME
+              value: /tmp
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+          securityContext: &locked
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts: &mounts
+            - name: repos
+              mountPath: /srv/git
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: git-daemon
+          image: p2-git-server:alpine3.22 # entrypoint: git
+          imagePullPolicy: Never
+          args:
+            - daemon
+            - --reuseaddr
+            - --base-path=/srv/git
+            - --export-all
+            - --enable=receive-pack
+            - --informative-errors
+            - --verbose
+            - /srv/git
+          env:
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: git
+              containerPort: 9418
+          readinessProbe:
+            tcpSocket:
+              port: git
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext: *locked
+          volumeMounts: *mounts
+      volumes:
+        - name: repos
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: git-server-from-argocd-repo-server
+  namespace: argocd
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: git-server
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: argocd-repo-server
+      ports:
+        - port: git

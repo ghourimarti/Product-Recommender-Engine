@@ -1,0 +1,56 @@
+# Argo CD on kind (todo 6.5.5): GitOps for the app chart. Lean on purpose (the 8 GB Docker VM):
+# one replica of each component, no Dex (local admin only), no notifications, no ApplicationSets.
+dex:
+  enabled: false
+notifications:
+  enabled: false
+applicationSet:
+  replicas: 0
+
+configs:
+  params:
+    server.insecure: true # kind: plain HTTP behind kubectl port-forward. Real clusters terminate TLS.
+    # Diff server-side, matching the server-side apply the apps use. The default client-side diff
+    # reported fields the API server defaults (StatefulSet PVC templates, Gateway API backendRefs)
+    # as permanent drift: qdrant, redis and the HTTPRoute stayed OutOfSync after every sync.
+    controller.diff.server.side: "true"
+  cm:
+    # Check git every 30 s instead of every 3 min, so a push shows up quickly while practising.
+    timeout.reconciliation: 30s
+    # kind only: read-only anonymous access, so headless screenshots can show the app tree.
+    # Real clusters use SSO and no anonymous access.
+    users.anonymous.enabled: "true"
+  rbac:
+    policy.default: role:readonly
+
+controller:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 768Mi
+server:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+repoServer:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+redis:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      memory: 128Mi

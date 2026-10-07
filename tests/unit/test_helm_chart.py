@@ -326,15 +326,17 @@ def test_api_env_names_are_unique(env: str) -> None:
     assert len(names) == len(set(names))
 
 
-def test_seed_job_runs_once_after_install() -> None:
+def test_seed_job_is_idempotent_and_runs_after_installs_and_upgrades() -> None:
     docs = _manifests("kind")
     job = _named(docs, "Job", "seed")
-    assert job["metadata"]["annotations"]["helm.sh/hook"] == "post-install"
+    # The catalog ships in the api image, so an upgrade may change it: re-check every time.
+    assert job["metadata"]["annotations"]["helm.sh/hook"] == "post-install,post-upgrade"
     seed = _container(job)
-    assert seed["command"] == ["python", "-m", "retrieval.index"]
+    # A no-op unless the catalog changed (Argo CD runs this hook on every sync).
+    assert seed["command"] == ["python", "-m", "retrieval.index", "--skip-if-current"]
     assert seed["image"] == _container(_named(docs, "Deployment", "api"))["image"]
-    upgraded = _named(_manifests("kind", "--set", "seed.onUpgrade=true"), "Job", "seed")
-    assert upgraded["metadata"]["annotations"]["helm.sh/hook"] == "post-install,post-upgrade"
+    install_only = _named(_manifests("kind", "--set", "seed.onUpgrade=false"), "Job", "seed")
+    assert install_only["metadata"]["annotations"]["helm.sh/hook"] == "post-install"
 
 
 def test_network_policies_deny_by_default_and_allow_each_path() -> None:

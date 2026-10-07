@@ -87,7 +87,7 @@ spec:
               sleep:
                 seconds: {{ .Values.preStopSleepSeconds }}
           volumeMounts:
-            - name: tmp # read-only root: fastembed caches its BM25 model in /tmp/fastembed_cache
+            - name: tmp # read-only root: scratch space (the BM25 model and tokenizer are baked into the image)
               mountPath: /tmp
       volumes:
         - name: tmp
