@@ -49,6 +49,11 @@ spec:
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+            {{- /* Always set, so the compose value carried in the Secret (localhost:2003) can't leak
+            into a cluster. Empty = real AWS DynamoDB through boto3's default credential chain
+            (IRSA / Pod Identity on EKS); the emulator only exists when dynamodbLocal is on. */}}
+            - name: DYNAMODB_ENDPOINT
+              value: {{ ternary (printf "http://dynamodb:%v" .Values.dynamodbLocal.port) "" .Values.dynamodbLocal.enabled | quote }}
           resources:
             {{- toYaml .Values.api.resources | nindent 12 }}
           securityContext:

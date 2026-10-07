@@ -14,8 +14,8 @@
 # running the real image that way in Docker (2026-10-06).
 
 # The chart doesn't create secrets. It expects a Secret with this name to already exist in the
-# namespace. The api loads all of it (envFrom); web reads only CLERK_SECRET_KEY; Qdrant reads only
-# QDRANT_API_KEY. How the Secret gets there is per environment:
+# namespace. The api and the seed Job load all of it (envFrom); web reads only CLERK_SECRET_KEY;
+# Qdrant reads only QDRANT_API_KEY. How the Secret gets there is per environment:
 #   kind: a make target builds it from a filtered .env (Phase 6)
 #   DOKS: decided in Phase 7 (SOPS or the External Secrets Operator)
 #   EKS:  External Secrets Operator + AWS Secrets Manager (Phase 8; not built yet)
@@ -63,6 +63,7 @@ api:
   env:
     # Cluster-internal URLs use Service names on their INTERNAL ports
     # (the Qdrant image speaks 6333 and Redis 6379; those don't change).
+    # DYNAMODB_ENDPOINT isn't listed here: the template derives it from dynamodbLocal.enabled.
     QDRANT_URL: http://qdrant:6333
     REDIS_URL: redis://redis:6379/0
     OTEL_EXPORTER_OTLP_ENDPOINT: ""
@@ -150,8 +151,51 @@ redis:
     fsGroup: 1000
     readOnlyRootFilesystem: true # AOF and snapshots go to the PVC at /data
 
-# Routing gets redesigned in step 6D (Gateway API). The class is set per environment.
-ingress:
+# North-south routing (Gateway API): one HTTPRoute, same-origin. /api/* goes to the api with the
+# prefix stripped, everything else to web. The platform owns the Gateway (created in step 6E);
+# the chart only attaches to it. This replaces the old ALB Ingress, which sent /api/* to FastAPI
+# unstripped, so every API call would have returned 404.
+gateway:
+  enabled: true
+  parentRefs:
+    - name: public
+      namespace: gateway
+  hostnames: [] # empty = every hostname on the Gateway's listener; set per environment
+  apiRequestTimeout: 120s # long enough for a streamed (SSE) answer to finish
+
+# In-memory DynamoDB emulator, for kind practice only. Real environments use AWS DynamoDB.
+dynamodbLocal:
   enabled: false
-  className: ""
-  host: recommender.example.com
+  image:
+    repository: amazon/dynamodb-local
+    tag: 2.5.2
+  port: 8000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  securityContext:
+    runAsUser: 1000 # the image's dynamodblocal user (USER is set by name in the image)
+    runAsGroup: 1000
+    readOnlyRootFilesystem: true # needs a disk-backed /tmp; see the template
+
+# Post-install Job that indexes the product catalog into Qdrant (the in-cluster `make seed`).
+seed:
+  enabled: true
+  onUpgrade: false # the indexer recreates the collection; see the template before turning this on
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+# Default-deny ingress for every pod in the release, plus one allow per real traffic path.
+networkPolicy:
+  enabled: true
+  gatewayNamespace: envoy-gateway-system # where Envoy Gateway runs its proxy pods (step 6E)
+  monitoringNamespace: monitoring # Prometheus scrapes api /metrics from here (step 6F); "" = none

@@ -194,7 +194,9 @@ HELM_CHART        := ops/helm/p2-recommender
 HELM_ENVS         := kind doks eks
 HELM_LINT_TAG     := 0000000
 HELM_LINT_TARGETS := $(addprefix helm-lint-,$(HELM_ENVS))
-KUBECONFORM       := kubeconform -strict -summary -kubernetes-version 1.36.1
+# Gateway API kinds (HTTPRoute) aren't in the core schemas, so fall back to the community CRD catalog.
+KUBECONFORM       := kubeconform -strict -summary -kubernetes-version 1.36.1 -schema-location default \
+                     -schema-location "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
 .PHONY: $(HELM_LINT_TARGETS)
 
 helm-lint: $(HELM_LINT_TARGETS)   ## Lint + schema-validate the chart for every environment

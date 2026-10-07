@@ -16,6 +16,12 @@ api:
     # ~5.9 GB was free in step 6A, and an api pod uses ~350 MB.
     maxReplicas: 4
 
+gateway:
+  hostnames: ["app.localhost"] # browsers and curl.exe resolve *.localhost to 127.0.0.1
+
+dynamodbLocal:
+  enabled: true # practice only: no durability, no HA
+
 qdrant:
   storage: 2Gi
   storageClassName: standard # kind's local-path provisioner: a directory on one node's disk

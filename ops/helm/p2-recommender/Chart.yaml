@@ -5,5 +5,7 @@ type: application
 # 0.2.0: standard selector labels, per-environment values overlays, required immutable image tags.
 # 0.3.0: restricted Pod Security profile, probes, PDBs, topology spread, Redis as a StatefulSet
 #        with AOF on a PVC, Qdrant API key enforced, headless governing Services.
-version: 0.3.0
+# 0.4.0: Gateway API HTTPRoute (same-origin /api) replaces the Ingress; dynamodb-local for kind;
+#        DYNAMODB_ENDPOINT derived per environment; post-install seed Job; NetworkPolicies.
+version: 0.4.0
 appVersion: "0.1.0"

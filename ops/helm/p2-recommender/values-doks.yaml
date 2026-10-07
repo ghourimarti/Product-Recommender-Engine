@@ -1,7 +1,8 @@
 # DigitalOcean DOKS (Phase 7). Only settings that are decided now live here. Phase 7 adds:
-#   image.registry:    registry.digitalocean.com/<registry-name>
-#   image.pullSecrets: the DOCR pull secret
-#   routing and TLS:   Gateway hostnames + cert-manager (templates arrive in step 6D)
+#   image.registry:     registry.digitalocean.com/<registry-name>
+#   image.pullSecrets:  the DOCR pull secret
+#   gateway.hostnames:  ["app.<your-domain>"], plus TLS on the Gateway (cert-manager)
+#   history store:      AWS DynamoDB with table-scoped IAM keys in the Secret (todo 7.0.5a)
 
 api:
   autoscaling:

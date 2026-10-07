@@ -37,19 +37,33 @@ def _session_of(sort_key: str) -> str:
     return sort_key.split("#", 2)[1] if sort_key.startswith("SESSION#") else ""
 
 
+def dynamodb_resource_kwargs(settings: Settings) -> dict[str, Any]:
+    """boto3 arguments for the configured DynamoDB.
+
+    With an endpoint override (DynamoDB-local), fall back to dummy credentials: the emulator
+    ignores them, but boto3 won't sign a request without some. Without an override this is real
+    AWS, so credentials are passed only when explicitly configured; otherwise boto3's default
+    chain finds them (env vars, IRSA, EKS Pod Identity). Dummy keys there would override the
+    pod's IAM role, and every call would be rejected.
+    """
+    kwargs: dict[str, Any] = {"region_name": settings.aws_region}
+    if settings.dynamodb_endpoint:
+        kwargs["endpoint_url"] = settings.dynamodb_endpoint
+        kwargs["aws_access_key_id"] = settings.aws_access_key_id or "local"
+        kwargs["aws_secret_access_key"] = settings.aws_secret_access_key or "local"
+    elif settings.aws_access_key_id and settings.aws_secret_access_key:
+        kwargs["aws_access_key_id"] = settings.aws_access_key_id
+        kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
+    return kwargs
+
+
 class DynamoChatHistory:
     """DynamoDB-backed chat history with per-user isolation + GDPR delete/export."""
 
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
         self._table_name = self._settings.dynamodb_table
-        self._resource: Any = boto3.resource(
-            "dynamodb",
-            endpoint_url=self._settings.dynamodb_endpoint or None,
-            region_name=self._settings.aws_region,
-            aws_access_key_id=self._settings.aws_access_key_id or "local",
-            aws_secret_access_key=self._settings.aws_secret_access_key or "local",
-        )
+        self._resource: Any = boto3.resource("dynamodb", **dynamodb_resource_kwargs(self._settings))
 
     def _table(self) -> Any:
         return self._resource.Table(self._table_name)

@@ -1,0 +1,75 @@
+{{- if .Values.dynamodbLocal.enabled }}
+{{- /* Practice only (kind): an in-memory DynamoDB emulator with no durability or HA. Real
+environments use AWS DynamoDB (todo 7.0.5 and Phase 8). Known kind-only gap: the api creates the
+table once per process (ensure_table behind an lru_cache), so if this pod restarts, chat history
+fails until the api pods restart too. */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dynamodb
+  labels:
+    {{- include "p2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dynamodb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "p2.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: dynamodb
+  template:
+    metadata:
+      labels:
+        {{- include "p2.labels" . | nindent 8 }}
+        app.kubernetes.io/component: dynamodb
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "p2.podSecurityContext" .Values.dynamodbLocal.securityContext | nindent 8 }}
+      containers:
+        - name: dynamodb
+          image: "{{ .Values.dynamodbLocal.image.repository }}:{{ .Values.dynamodbLocal.image.tag }}"
+          {{- /* -sharedDb: one database for every client. Without it the emulator keeps a separate
+          database per access key and region, and clients silently see different tables. */}}
+          args: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.dynamodbLocal.port }}
+          resources:
+            {{- toYaml .Values.dynamodbLocal.resources | nindent 12 }}
+          securityContext:
+            {{- include "p2.containerSecurityContext" .Values.dynamodbLocal.securityContext | nindent 12 }}
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      {{- /* Disk-backed on purpose: the emulator extracts its SQLite native library into /tmp and
+      loads it from there, which fails on a noexec tmpfs (checked 2026-10-06). */}}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dynamodb
+  labels:
+    {{- include "p2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dynamodb
+spec:
+  selector:
+    {{- include "p2.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: dynamodb
+  ports:
+    - name: http
+      protocol: TCP
+      port: {{ .Values.dynamodbLocal.port }}
+      targetPort: http
+{{- end }}

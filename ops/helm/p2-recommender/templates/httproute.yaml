@@ -1,0 +1,44 @@
+{{- if .Values.gateway.enabled }}
+{{- /* Same-origin routing: the browser calls /api/* on the web app's own host, so there's no CORS
+and one web build (NEXT_PUBLIC_API_URL=/api) works in every environment. The Gateway strips /api
+before FastAPI sees the request, because the API serves its routes at the root. The platform owns
+the Gateway (step 6E); the chart only attaches this route to it. */}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: p2
+  labels:
+    {{- include "p2.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    {{- toYaml .Values.gateway.parentRefs | nindent 4 }}
+  {{- with .Values.gateway.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
+      backendRefs:
+        - name: api
+          port: {{ .Values.api.port }}
+      {{- /* /chat and /aggregate/stream stream their answers (SSE). A short default route timeout
+      would cut an answer off mid-stream. */}}
+      timeouts:
+        request: {{ .Values.gateway.apiRequestTimeout }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: web
+          port: {{ .Values.web.port }}
+{{- end }}

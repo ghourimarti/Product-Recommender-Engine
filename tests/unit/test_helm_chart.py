@@ -2,14 +2,15 @@
 
 They render the chart with `helm template` and check invariants that break silently: a Service
 whose selector matches no pod has zero endpoints, a fixed `replicas` under an HPA fights the HPA
-on every upgrade, and a pod that isn't provably non-root fails only at runtime, on the node.
-Skipped when the helm binary isn't installed.
+on every upgrade, a pod that isn't provably non-root fails only at runtime on the node, and a
+route that doesn't strip /api sends every API call to a 404. Skipped when helm isn't installed.
 """
 
 from __future__ import annotations
 
 import shutil
 import subprocess
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,8 @@ import yaml
 CHART = Path(__file__).resolve().parents[2] / "ops" / "helm" / "p2-recommender"
 ENVS = ["kind", "doks", "eks"]
 TAG = "abc1234"
-WORKLOAD_KINDS = ("Deployment", "StatefulSet")
+WORKLOAD_KINDS = ("Deployment", "StatefulSet")  # long-running, with selectors and probes
+POD_KINDS = (*WORKLOAD_KINDS, "Job")  # everything that creates pods
 SELECTOR_KEYS = {
     "app.kubernetes.io/name",
     "app.kubernetes.io/instance",
@@ -38,11 +40,16 @@ def _render(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _manifests(env: str, *extra: str) -> list[dict[str, Any]]:
+@cache  # each distinct render runs once per test session
+def _rendered(env: str, extra: tuple[str, ...]) -> tuple[dict[str, Any], ...]:
     values = str(CHART / f"values-{env}.yaml")
     result = _render("-f", values, "--set-string", f"image.tag={TAG}", *extra)
     assert result.returncode == 0, result.stderr
-    return [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    return tuple(doc for doc in yaml.safe_load_all(result.stdout) if doc)
+
+
+def _manifests(env: str, *extra: str) -> list[dict[str, Any]]:
+    return list(_rendered(env, extra))
 
 
 def _of_kind(docs: list[dict[str, Any]], *kinds: str) -> list[dict[str, Any]]:
@@ -145,9 +152,9 @@ def test_kind_overlay() -> None:
 
 @pytest.mark.parametrize("env", ENVS)
 def test_every_pod_runs_the_restricted_profile(env: str) -> None:
-    for workload in _of_kind(_manifests(env), *WORKLOAD_KINDS):
-        name = workload["metadata"]["name"]
-        pod = workload["spec"]["template"]["spec"]
+    for owner in _of_kind(_manifests(env), *POD_KINDS):
+        name = owner["metadata"]["name"]
+        pod = owner["spec"]["template"]["spec"]
         security = pod["securityContext"]
         assert security["runAsNonRoot"] is True, name
         # Numeric, because the kubelet can't verify that a named image USER isn't root.
@@ -159,16 +166,16 @@ def test_every_pod_runs_the_restricted_profile(env: str) -> None:
             assert locked["allowPrivilegeEscalation"] is False, name
             assert locked["capabilities"]["drop"] == ["ALL"], name
             assert locked["readOnlyRootFilesystem"] is True, name
+            assert container["resources"]["requests"], name
+            assert container["resources"]["limits"], name
 
 
 @pytest.mark.parametrize("env", ENVS)
-def test_every_container_has_probes_and_resources(env: str) -> None:
+def test_every_long_running_container_has_probes(env: str) -> None:
     for workload in _of_kind(_manifests(env), *WORKLOAD_KINDS):
         name = workload["metadata"]["name"]
         for container in workload["spec"]["template"]["spec"]["containers"]:
             assert "readinessProbe" in container and "livenessProbe" in container, name
-            assert container["resources"]["requests"], name
-            assert container["resources"]["limits"], name
 
 
 def test_read_only_roots_get_writable_dirs_where_the_images_write() -> None:
@@ -177,8 +184,10 @@ def test_read_only_roots_get_writable_dirs_where_the_images_write() -> None:
     expected = {
         ("Deployment", "api"): {"/tmp"},
         ("Deployment", "web"): {"/tmp", "/app/.next/cache"},
+        ("Deployment", "dynamodb"): {"/tmp"},
         ("StatefulSet", "qdrant"): {"/qdrant/storage", "/qdrant/snapshots", "/tmp"},
         ("StatefulSet", "redis"): {"/data"},
+        ("Job", "seed"): {"/tmp"},
     }
     for (kind, name), paths in expected.items():
         mounts = {m["mountPath"] for m in _container(_named(docs, kind, name))["volumeMounts"]}
@@ -245,3 +254,95 @@ def test_deployments_spread_across_nodes() -> None:
         assert spread["topologyKey"] == "kubernetes.io/hostname", name
         assert spread["whenUnsatisfiable"] == "ScheduleAnyway", name
         assert spread["matchLabelKeys"] == ["pod-template-hash"], name
+
+
+# ── Per-environment wiring (6D) ────────────────────────────────────────────────────────────
+
+
+def test_http_route_strips_the_api_prefix() -> None:
+    docs = _manifests("kind")
+    (route,) = _of_kind(docs, "HTTPRoute")
+    assert route["spec"]["hostnames"] == ["app.localhost"]
+    api_rule, web_rule = route["spec"]["rules"]
+    assert api_rule["matches"] == [{"path": {"type": "PathPrefix", "value": "/api"}}]
+    assert api_rule["filters"] == [
+        {
+            "type": "URLRewrite",
+            "urlRewrite": {"path": {"type": "ReplacePrefixMatch", "replacePrefixMatch": "/"}},
+        }
+    ]
+    assert api_rule["timeouts"]["request"] == "120s"  # streamed (SSE) answers must not be cut off
+    assert web_rule["matches"] == [{"path": {"type": "PathPrefix", "value": "/"}}]
+    # Every backend is a Service in the release, on a port that Service exposes.
+    services = {s["metadata"]["name"]: s for s in _of_kind(docs, "Service")}
+    for rule in route["spec"]["rules"]:
+        for ref in rule["backendRefs"]:
+            assert ref["port"] in {p["port"] for p in services[ref["name"]]["spec"]["ports"]}
+
+
+@pytest.mark.parametrize("env", ENVS)
+def test_no_ingress_is_rendered(env: str) -> None:
+    # The old ALB Ingress forwarded /api/* to FastAPI unstripped; the HTTPRoute replaces it.
+    assert not _of_kind(_manifests(env), "Ingress")
+
+
+@pytest.mark.parametrize(
+    ("env", "endpoint", "emulator"),
+    [("kind", "http://dynamodb:8000", True), ("doks", "", False), ("eks", "", False)],
+)
+def test_dynamodb_endpoint_follows_the_environment(env: str, endpoint: str, emulator: bool) -> None:
+    docs = _manifests(env)
+    env_vars = {
+        e["name"]: e.get("value") for e in _container(_named(docs, "Deployment", "api"))["env"]
+    }
+    # Always set explicitly, so the Secret's compose value (localhost:2003) can't leak in.
+    assert env_vars["DYNAMODB_ENDPOINT"] == endpoint
+    deployments = {d["metadata"]["name"] for d in _of_kind(docs, "Deployment")}
+    assert ("dynamodb" in deployments) is emulator
+
+
+@pytest.mark.parametrize("env", ENVS)
+def test_api_env_names_are_unique(env: str) -> None:
+    names = [e["name"] for e in _container(_named(_manifests(env), "Deployment", "api"))["env"]]
+    assert len(names) == len(set(names))
+
+
+def test_seed_job_runs_once_after_install() -> None:
+    docs = _manifests("kind")
+    job = _named(docs, "Job", "seed")
+    assert job["metadata"]["annotations"]["helm.sh/hook"] == "post-install"
+    seed = _container(job)
+    assert seed["command"] == ["python", "-m", "retrieval.index"]
+    assert seed["image"] == _container(_named(docs, "Deployment", "api"))["image"]
+    upgraded = _named(_manifests("kind", "--set", "seed.onUpgrade=true"), "Job", "seed")
+    assert upgraded["metadata"]["annotations"]["helm.sh/hook"] == "post-install,post-upgrade"
+
+
+def test_network_policies_deny_by_default_and_allow_each_path() -> None:
+    docs = _manifests("kind")
+    policies = {p["metadata"]["name"]: p for p in _of_kind(docs, "NetworkPolicy")}
+    deny = policies["default-deny-ingress"]["spec"]
+    assert deny["policyTypes"] == ["Ingress"] and "ingress" not in deny
+    # The default-deny covers every pod the chart creates, the seed Job included.
+    for owner in _of_kind(docs, *POD_KINDS):
+        assert deny["podSelector"]["matchLabels"].items() <= _pod_labels(owner).items()
+
+    def peer_components(policy: str) -> set[str]:
+        sources = policies[policy]["spec"]["ingress"][0]["from"]
+        return {s["podSelector"]["matchLabels"]["app.kubernetes.io/component"] for s in sources}
+
+    assert peer_components("qdrant-from-api-and-seed") == {"api", "seed"}
+    assert peer_components("redis-from-api") == {"api"}
+    assert peer_components("dynamodb-from-api") == {"api"}
+    gateway = {
+        "namespaceSelector": {
+            "matchLabels": {"kubernetes.io/metadata.name": "envoy-gateway-system"}
+        }
+    }
+    assert policies["web-from-gateway"]["spec"]["ingress"][0]["from"] == [gateway]
+    assert gateway in policies["api-from-gateway-and-monitoring"]["spec"]["ingress"][0]["from"]
+    # Every allow targets a workload that exists in the release.
+    pod_label_sets = [_pod_labels(w) for w in _of_kind(docs, *WORKLOAD_KINDS)]
+    for name, policy in policies.items():
+        selector = policy["spec"]["podSelector"]["matchLabels"]
+        assert any(selector.items() <= labels.items() for labels in pod_label_sets), name

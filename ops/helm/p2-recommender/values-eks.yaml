@@ -1,7 +1,12 @@
 # AWS EKS (Phase 8). Only settings that are decided now live here. Phase 8 adds:
 #   image.registry:                 <account>.dkr.ecr.<region>.amazonaws.com
 #   api.serviceAccount.annotations: eks.amazonaws.com/role-arn (IRSA, from the Terraform outputs)
+#   gateway.hostnames:              the production hostname
 #   Redis moves to ElastiCache; secrets come from External Secrets Operator + Secrets Manager
+#
+# North-south: the same HTTPRoute as every other environment, served by Envoy Gateway behind an
+# NLB (todo 8.2.5). The ALB Ingress option was dropped in step 6D: an ALB can't be relied on to
+# strip the /api prefix, and the API serves its routes at the root.
 
 qdrant:
   # Needs the EBS CSI driver and a StorageClass named gp3, both created in Phase 8.
@@ -9,6 +14,3 @@ qdrant:
 
 redis:
   storageClassName: gp3 # until Phase 8 swaps in-cluster Redis for ElastiCache
-
-ingress:
-  className: alb # AWS Load Balancer Controller. Routing gets redesigned in step 6D.
