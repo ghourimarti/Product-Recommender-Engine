@@ -18,6 +18,10 @@ spec:
         app.kubernetes.io/component: web
     spec:
       automountServiceAccountToken: false
+      {{- /* No Docker-links env vars. The Service named "web" would inject WEB_PORT=tcp://<ip>:2012,
+      overriding the image's WEB_PORT=2012, and Next.js would start on its default port 3000 (seen
+      on the first kind install). Every pod in the chart finds services through DNS instead. */}}
+      enableServiceLinks: false
       securityContext:
         {{- include "p2.podSecurityContext" .Values.web.securityContext | nindent 8 }}
       {{- if .Values.topologySpread.enabled }}
@@ -35,9 +39,11 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.web.port }}
-          {{- /* Only the Clerk server key, not the whole Secret: the web pod has no business
-          holding the LLM, SerpApi or AWS keys. */}}
+          {{- /* From the Secret, only the Clerk server key: the web pod has no business holding
+          the LLM, SerpApi or AWS keys. */}}
           env:
+            - name: WEB_PORT # the image starts Next.js on $WEB_PORT; tie it to the containerPort
+              value: {{ .Values.web.port | quote }}
             - name: CLERK_SECRET_KEY
               valueFrom:
                 secretKeyRef:

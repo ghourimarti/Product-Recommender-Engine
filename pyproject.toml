@@ -72,6 +72,9 @@ extend-exclude = ["demo", "old", "Prompts"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["infra", "ops"] # repo-root script dirs (tests import infra.kind.*)
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

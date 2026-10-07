@@ -23,6 +23,7 @@ spec:
         app.kubernetes.io/component: dynamodb
     spec:
       automountServiceAccountToken: false
+      enableServiceLinks: false # services are found through DNS (see web-deployment.yaml)
       securityContext:
         {{- include "p2.podSecurityContext" .Values.dynamodbLocal.securityContext | nindent 8 }}
       containers:

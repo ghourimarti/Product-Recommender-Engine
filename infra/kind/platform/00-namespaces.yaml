@@ -1,0 +1,25 @@
+# Namespaces the platform owns. Applied by `make kind-addons`, before the Secret and the chart.
+#
+# gateway: holds the shared Gateway and its TLS certificate. No pods run here: Envoy Gateway
+#   runs the proxy pods in envoy-gateway-system.
+# p2: the app. Pod Security Admission enforces the "restricted" profile (the chart was built
+#   and dry-run against it in 6C/6D), and the gateway-access label lets this namespace attach
+#   HTTPRoutes to Gateway gateway/public. Namespaces without the label can't.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.36
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: p2
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.36
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.36
+    gateway-access: public

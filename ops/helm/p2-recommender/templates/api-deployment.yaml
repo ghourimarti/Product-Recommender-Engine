@@ -23,6 +23,7 @@ spec:
     spec:
       serviceAccountName: {{ .Values.api.serviceAccount.name }}
       automountServiceAccountToken: false # the api never calls the Kubernetes API
+      enableServiceLinks: false # services are found through DNS (see web-deployment.yaml)
       terminationGracePeriodSeconds: {{ .Values.api.terminationGracePeriodSeconds }}
       securityContext:
         {{- include "p2.podSecurityContext" .Values.api.securityContext | nindent 8 }}

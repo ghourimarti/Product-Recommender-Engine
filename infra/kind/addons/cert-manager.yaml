@@ -1,0 +1,3 @@
+# cert-manager on kind (todo 6.5.3). Issuers and certificates live in infra/kind/platform/.
+crds:
+  enabled: true # install the CRDs with the chart, so one command sets everything up

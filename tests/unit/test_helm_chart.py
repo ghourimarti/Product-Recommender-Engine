@@ -202,12 +202,13 @@ def test_api_survives_a_slow_start_and_drains_gracefully() -> None:
     assert api["lifecycle"]["preStop"]["sleep"]["seconds"] > 0
 
 
-def test_web_gets_only_the_clerk_key() -> None:
+def test_web_gets_only_the_clerk_key_from_the_secret() -> None:
     web = _container(_named(_manifests("kind"), "Deployment", "web"))
     assert "envFrom" not in web
-    env = {item["name"]: item for item in web["env"]}
-    assert set(env) == {"CLERK_SECRET_KEY"}
-    assert env["CLERK_SECRET_KEY"]["valueFrom"]["secretKeyRef"]["key"] == "CLERK_SECRET_KEY"
+    from_secret = {item["name"]: item for item in web["env"] if "valueFrom" in item}
+    assert set(from_secret) == {"CLERK_SECRET_KEY"}
+    ref = from_secret["CLERK_SECRET_KEY"]["valueFrom"]["secretKeyRef"]
+    assert ref["key"] == "CLERK_SECRET_KEY"
 
 
 def test_qdrant_enforces_the_api_key_from_the_secret() -> None:
@@ -244,6 +245,22 @@ def test_pdbs_cover_the_replicated_workloads() -> None:
         pods = _pod_labels(_named(docs, "Deployment", name))
         assert pdb["spec"]["selector"]["matchLabels"].items() <= pods.items(), name
         assert pdb["spec"]["maxUnavailable"] == 1, name
+
+
+@pytest.mark.parametrize("env", ENVS)
+def test_no_pod_gets_service_link_env_vars(env: str) -> None:
+    # On the first kind install the Service named "web" injected WEB_PORT=tcp://<ip>:2012, which
+    # overrode the image's WEB_PORT, so Next.js started on port 3000 and never became ready.
+    for owner in _of_kind(_manifests(env), *POD_KINDS):
+        pod = owner["spec"]["template"]["spec"]
+        assert pod["enableServiceLinks"] is False, owner["metadata"]["name"]
+
+
+def test_web_listens_on_its_container_port() -> None:
+    web = _container(_named(_manifests("kind", "--set", "web.port=3100"), "Deployment", "web"))
+    env = {item["name"]: item.get("value") for item in web["env"]}
+    assert env["WEB_PORT"] == "3100"
+    assert web["ports"][0]["containerPort"] == 3100
 
 
 def test_deployments_spread_across_nodes() -> None:

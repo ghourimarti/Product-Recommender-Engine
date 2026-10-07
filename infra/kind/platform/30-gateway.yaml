@@ -1,0 +1,33 @@
+# The shared Gateway (todo 6.5.2). The chart's HTTPRoute attaches to it by name (gateway/public).
+# Only namespaces labelled gateway-access=public may attach routes (see 00-namespaces.yaml).
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: public
+  namespace: gateway
+spec:
+  gatewayClassName: eg
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              gateway-access: public
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: app.localhost
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: app-localhost-tls # issued by cert-manager (20-certificates.yaml)
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              gateway-access: public

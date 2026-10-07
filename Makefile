@@ -3,7 +3,7 @@
         serve build-backend \
         db services app obs observability langfuse full up upv \
         ps logs down downv seed bootstrap urls wait-api \
-        helm-lint kind-up kind-down
+        helm-lint kind-up kind-down kind-addons kind-images kind-secret kind-deploy kind-smoke
 
 # ─── Layered local stack ──────────────────────────────────────────────────────
 #   db             = data stores only    (Qdrant + DynamoDB-local + Redis)
@@ -56,8 +56,8 @@ fmt:            ## Ruff format + auto-fix
 	uv run ruff format .
 	uv run ruff check --fix .
 
-type:           ## mypy on packages/apps/tests
-	uv run mypy packages apps tests
+type:           ## mypy on packages/apps/tests + the ops/infra scripts
+	uv run mypy packages apps tests ops infra
 
 test:           ## Run the test suite
 	uv run pytest -q
@@ -208,15 +208,67 @@ $(HELM_LINT_TARGETS): helm-lint-%:   ## Lint + schema-validate one environment, 
 
 # ─── kind  (Phase 6: local, production-like Kubernetes; $0) ───────────────────
 #   The compose stack and a kind cluster don't fit in the 8 GB Docker VM together:
-#   run `make down` first.
+#   run `make down` first. From zero, in order:
+#     make kind-up kind-addons kind-images kind-secret kind-deploy kind-smoke
+#   PROFILE is the API's auth mode: clerk (default; real Clerk sign-in in the browser) or
+#   devauth (minted HS256 tokens, for the k6 drills). `make kind-secret PROFILE=devauth`
+#   switches a running cluster and restarts the api.
+#   These recipes avoid shell syntax on purpose: run from PowerShell, GNU make on Windows finds
+#   no sh.exe and runs recipes in cmd.exe. Logic lives in make functions or the Python scripts.
 
 KIND_CLUSTER ?= p2
+KIND_CONTEXT := kind-$(KIND_CLUSTER)
+KIND_NS      ?= p2
+PROFILE      ?= clerk
+KUBECTL      := kubectl --context $(KIND_CONTEXT)
+include infra/kind/addons/versions.env
+
+# One tag for both images: the commit's short SHA, plus -dirty when the image inputs have
+# uncommitted changes, so a tag never claims to be a commit it isn't.
+IMAGE_INPUTS := apps packages data pyproject.toml uv.lock
+IMAGE_TAG    ?= $(shell git rev-parse --short HEAD)$(if $(shell git status --porcelain -- $(IMAGE_INPUTS)),-dirty)
 
 kind-up:        ## Phase 6: create the kind cluster (1 control-plane + 2 workers, pinned image)
 	kind create cluster --name $(KIND_CLUSTER) --config infra/kind/kind-config.yaml
 
 kind-down:      ## Phase 6: delete the kind cluster
 	kind delete cluster --name $(KIND_CLUSTER)
+
+kind-addons:    ## Phase 6: metrics-server, Envoy Gateway, cert-manager (pinned) + namespaces, TLS, Gateway
+	helm upgrade --install metrics-server metrics-server --repo https://kubernetes-sigs.github.io/metrics-server/ \
+	  --version $(METRICS_SERVER_VERSION) -n kube-system -f infra/kind/addons/metrics-server.yaml \
+	  --kube-context $(KIND_CONTEXT) --wait=watcher --timeout 5m
+	helm upgrade --install eg oci://docker.io/envoyproxy/gateway-helm --version $(ENVOY_GATEWAY_VERSION) \
+	  -n envoy-gateway-system --create-namespace --kube-context $(KIND_CONTEXT) --wait=watcher --timeout 5m
+	helm upgrade --install cert-manager cert-manager --repo https://charts.jetstack.io \
+	  --version $(CERT_MANAGER_VERSION) -n cert-manager --create-namespace -f infra/kind/addons/cert-manager.yaml \
+	  --kube-context $(KIND_CONTEXT) --wait=watcher --timeout 5m
+	$(KUBECTL) apply -f infra/kind/platform/
+	$(KUBECTL) wait --for=condition=Accepted gatewayclass/eg --timeout=120s
+	$(KUBECTL) -n gateway wait --for=condition=Ready certificate/app-localhost --timeout=120s
+	$(KUBECTL) -n gateway wait --for=condition=Programmed gateway/public --timeout=180s
+
+# The web image bakes in its API URL (/api: same origin, through the Gateway) and the Clerk
+# publishable key. Both are public; secrets are runtime-only and never reach an image.
+kind-images:    ## Phase 6: build api + web at IMAGE_TAG and load them into the kind nodes
+	$(eval CLERK_PK := $(shell uv run python -c "from dotenv import get_key; print(get_key('.env', 'CLERK_PUBLISHABLE_KEY') or '')"))
+	$(if $(CLERK_PK),,$(error CLERK_PUBLISHABLE_KEY is empty in .env))
+	docker build -f apps/api/Dockerfile -t p2-api:$(IMAGE_TAG) .
+	@echo docker build apps/web -t p2-web:$(IMAGE_TAG) --build-arg NEXT_PUBLIC_API_URL=/api --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=[CLERK_PUBLISHABLE_KEY from .env]
+	@docker build apps/web -t p2-web:$(IMAGE_TAG) --build-arg NEXT_PUBLIC_API_URL=/api \
+	  --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$(CLERK_PK)
+	kind load docker-image --name $(KIND_CLUSTER) p2-api:$(IMAGE_TAG) p2-web:$(IMAGE_TAG)
+
+kind-secret:    ## Phase 6: (re)create p2-secrets from a filtered .env (PROFILE=clerk|devauth); restarts the api
+	uv run python infra/kind/kind_secret.py --profile $(PROFILE) --namespace $(KIND_NS) --context $(KIND_CONTEXT)
+
+kind-deploy:    ## Phase 6: install or upgrade the chart at IMAGE_TAG (after kind-images + kind-secret)
+	helm upgrade --install p2 $(HELM_CHART) -n $(KIND_NS) --kube-context $(KIND_CONTEXT) \
+	  -f $(HELM_CHART)/values-kind.yaml --set-string image.tag=$(IMAGE_TAG) \
+	  --rollback-on-failure --wait=watcher --timeout 10m
+
+kind-smoke:     ## Phase 6: smoke-test through the Gateway; AGGREGATE=1 spends one live SerpApi search
+	uv run python ops/smoke/smoke.py --auth-mode $(PROFILE) $(if $(AGGREGATE),--aggregate)
 
 
 # ─── wait-api  (poll API /health after boot; used by full/upv/bootstrap) ──────

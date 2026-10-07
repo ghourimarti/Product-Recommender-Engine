@@ -1,0 +1,53 @@
+# TLS on kind (todo 6.5.3): a self-signed root issues one local CA, and the CA issues the
+# Gateway's certificate. Clients trust the single CA certificate (exported from Secret
+# cert-manager/p2-local-ca) instead of each leaf. DOKS swaps this for Let's Encrypt (7.3).
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: p2-local-ca
+  namespace: cert-manager # a CA ClusterIssuer reads its key pair from cert-manager's own namespace
+spec:
+  isCA: true
+  commonName: p2-local-ca
+  secretName: p2-local-ca
+  duration: 8760h # 1 year: this cluster is disposable
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: selfsigned
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: p2-local-ca
+spec:
+  ca:
+    secretName: p2-local-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: app-localhost
+  namespace: gateway # beside the Gateway that serves it, so no ReferenceGrant is needed
+spec:
+  secretName: app-localhost-tls
+  dnsNames:
+    - app.localhost
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: p2-local-ca

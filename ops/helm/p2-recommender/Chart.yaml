@@ -7,5 +7,7 @@ type: application
 #        with AOF on a PVC, Qdrant API key enforced, headless governing Services.
 # 0.4.0: Gateway API HTTPRoute (same-origin /api) replaces the Ingress; dynamodb-local for kind;
 #        DYNAMODB_ENDPOINT derived per environment; post-install seed Job; NetworkPolicies.
-version: 0.4.0
+# 0.5.0: no service-link env vars in any pod (the "web" Service's WEB_PORT=tcp://... moved Next.js
+#        to port 3000 on the first kind install); web's WEB_PORT is set from web.port.
+version: 0.5.0
 appVersion: "0.1.0"

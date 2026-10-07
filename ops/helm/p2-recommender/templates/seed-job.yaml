@@ -25,6 +25,7 @@ spec:
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false
+      enableServiceLinks: false # services are found through DNS (see web-deployment.yaml)
       securityContext:
         {{- include "p2.podSecurityContext" .Values.api.securityContext | nindent 8 }}
       {{- with .Values.image.pullSecrets }}

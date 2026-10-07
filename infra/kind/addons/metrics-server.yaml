@@ -1,0 +1,5 @@
+# metrics-server on kind (todo 6.5.1): feeds the api HorizontalPodAutoscaler and `kubectl top`.
+args:
+  # kind's kubelets serve self-signed certificates, so metrics-server can't verify them.
+  # Real clusters (DOKS, EKS) don't need this.
+  - --kubelet-insecure-tls

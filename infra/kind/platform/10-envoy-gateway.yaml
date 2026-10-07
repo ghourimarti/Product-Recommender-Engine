@@ -1,0 +1,39 @@
+# Envoy Gateway on kind (todo 6.5.2): how the proxy is exposed, and the GatewayClass.
+#
+# Docker Desktop on Windows can't reach LoadBalancer IPs (F12), so the proxy Service is a NodePort
+# on fixed ports 30080/30443, which infra/kind/kind-config.yaml publishes on 127.0.0.1:80/443.
+# externalTrafficPolicy must be Cluster: the published ports land on the control-plane node, and
+# the proxy pod runs on a worker. Envoy Gateway's default (Local) would drop that traffic.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: kind-nodeport
+  namespace: envoy-gateway-system
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: NodePort
+        externalTrafficPolicy: Cluster
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports: # merged by port number into the Service Envoy Gateway generates
+                - port: 80
+                  nodePort: 30080
+                - port: 443
+                  nodePort: 30443
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: kind-nodeport
+    namespace: envoy-gateway-system
