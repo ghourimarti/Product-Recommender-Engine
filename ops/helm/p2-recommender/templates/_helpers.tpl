@@ -27,6 +27,16 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" }}
 {{- end -}}
 
 {{/*
+Pod template labels: the selector labels plus part-of, without the chart and app versions. Any
+change to a pod template restarts its pods, so with helm.sh/chart here every chart version bump
+would restart every pod, including the single-replica Qdrant and Redis.
+*/}}
+{{- define "p2.podLabels" -}}
+{{ include "p2.selectorLabels" . }}
+app.kubernetes.io/part-of: {{ include "p2.name" . }}
+{{- end -}}
+
+{{/*
 Image reference for the images we build (api, web): [registry/]repository:tag.
 
 The tag must be an immutable git SHA. Empty and "latest" are rejected, so a rollout always means

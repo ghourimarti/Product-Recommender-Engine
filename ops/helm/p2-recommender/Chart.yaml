@@ -9,5 +9,8 @@ type: application
 #        DYNAMODB_ENDPOINT derived per environment; post-install seed Job; NetworkPolicies.
 # 0.5.0: no service-link env vars in any pod (the "web" Service's WEB_PORT=tcp://... moved Next.js
 #        to port 3000 on the first kind install); web's WEB_PORT is set from web.port.
-version: 0.5.0
+# 0.6.0: monitoring (ServiceMonitor, PrometheusRule, Grafana dashboards) from files/, shared with
+#        compose; ApiDown also fires with zero replicas; pod templates drop the chart/app version
+#        labels, so a chart bump no longer restarts every pod.
+version: 0.6.0
 appVersion: "0.1.0"

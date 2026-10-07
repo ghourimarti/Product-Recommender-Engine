@@ -1,0 +1,94 @@
+# kube-prometheus-stack on kind (todo 6.5.4): Prometheus Operator, Prometheus, Alertmanager,
+# Grafana, kube-state-metrics, node-exporter. Lean on purpose: the 8 GB Docker VM had ~3.6 GB
+# left once the app was running (step 6E).
+crds:
+  enabled: true
+
+# kind runs etcd, the scheduler, the controller manager and kube-proxy bound to 127.0.0.1 inside
+# the node containers, so Prometheus can't scrape them. Scraping anyway only yields permanent
+# "target down" alerts, so skip those targets and their rules. Real clusters keep the defaults.
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeProxy:
+  enabled: false
+defaultRules:
+  rules:
+    etcd: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeControllerManager: false
+    kubeProxy: false
+
+prometheus:
+  prometheusSpec:
+    retention: 2d
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    # Pick up ServiceMonitors and PrometheusRules from every namespace, not only objects labelled
+    # for this Helm release: the app chart ships its own (step 6F).
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 100m
+        memory: 400Mi
+      limits:
+        memory: 1Gi
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+  config:
+    route:
+      receiver: alert-sink
+      group_by: [alertname, namespace]
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 4h
+      routes:
+        - receiver: "null"
+          matchers:
+            - alertname =~ "Watchdog|InfoInhibitor"
+    receivers:
+      - name: "null"
+      # A local webhook that logs each alert (infra/kind/platform/40-alert-sink.yaml), so alert
+      # payloads never leave the machine. Real clusters route to email, Slack or PagerDuty.
+      - name: alert-sink
+        webhook_configs:
+          - url: http://alert-sink.monitoring.svc:8080/
+            send_resolved: true
+
+grafana:
+  # Chart 92.0.0 ships Grafana 13.2.3, which pinned 14 CPU cores on kind (busy-looping on SQLite
+  # leases in its secure-values cleanup) and never became Ready. 12.4.x is the maintained line
+  # before it (12.4.12 pushed 2026-09-29). Re-test 13.x before unpinning.
+  image:
+    tag: 12.4.12
+  adminPassword: "" # empty: the chart generates one (Secret monitoring/kube-prometheus-stack-grafana)
+  grafana.ini:
+    # kind only: read-only anonymous access, so headless screenshots can load dashboards.
+    # Real clusters use SSO and no anonymous access.
+    auth.anonymous:
+      enabled: true
+      org_role: Viewer
+  sidecar:
+    dashboards:
+      searchNamespace: ALL # the app chart ships its dashboards in its own namespace
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: "1" # one runaway add-on must not take every core of the laptop
+      memory: 384Mi

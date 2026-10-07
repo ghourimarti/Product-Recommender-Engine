@@ -3,7 +3,7 @@
         serve build-backend \
         db services app obs observability langfuse full up upv \
         ps logs down downv seed bootstrap urls wait-api \
-        helm-lint kind-up kind-down kind-addons kind-images kind-secret kind-deploy kind-smoke
+        alerts-test helm-lint kind-up kind-down kind-addons kind-images kind-secret kind-deploy kind-smoke
 
 # ─── Layered local stack ──────────────────────────────────────────────────────
 #   db             = data stores only    (Qdrant + DynamoDB-local + Redis)
@@ -184,6 +184,17 @@ bootstrap:      ## FROM SCRATCH: bring app tier up, index catalog, print URLs
 	@$(MAKE) --no-print-directory urls
 
 
+# ─── Alert rules  ─────────────────────────────────────────────────────────────
+#   One rules file for compose and Kubernetes (ops/helm/p2-recommender/files/alerts.yaml).
+#   promtool runs from the Prometheus image compose uses, so no local install is needed.
+
+PROMTOOL := docker run --rm -v "$(CURDIR):/repo" -w /repo --entrypoint promtool prom/prometheus:v2.55.0
+
+alerts-test:    ## Validate the shared alert rules and run their promtool unit tests (Docker)
+	$(PROMTOOL) check rules ops/helm/p2-recommender/files/alerts.yaml
+	$(PROMTOOL) test rules tests/promtool/alerts_test.yaml
+
+
 # ─── Helm  ────────────────────────────────────────────────────────────────────
 
 #   One lint per environment values file. The chart refuses to render without an explicit,
@@ -234,7 +245,8 @@ kind-up:        ## Phase 6: create the kind cluster (1 control-plane + 2 workers
 kind-down:      ## Phase 6: delete the kind cluster
 	kind delete cluster --name $(KIND_CLUSTER)
 
-kind-addons:    ## Phase 6: metrics-server, Envoy Gateway, cert-manager (pinned) + namespaces, TLS, Gateway
+kind-addons:    ## Phase 6: metrics-server, Envoy Gateway, cert-manager, kube-prometheus-stack (pinned) + Gateway, TLS, alert sink
+	$(KUBECTL) apply -f infra/kind/platform/00-namespaces.yaml
 	helm upgrade --install metrics-server metrics-server --repo https://kubernetes-sigs.github.io/metrics-server/ \
 	  --version $(METRICS_SERVER_VERSION) -n kube-system -f infra/kind/addons/metrics-server.yaml \
 	  --kube-context $(KIND_CONTEXT) --wait=watcher --timeout 5m
@@ -243,10 +255,14 @@ kind-addons:    ## Phase 6: metrics-server, Envoy Gateway, cert-manager (pinned)
 	helm upgrade --install cert-manager cert-manager --repo https://charts.jetstack.io \
 	  --version $(CERT_MANAGER_VERSION) -n cert-manager --create-namespace -f infra/kind/addons/cert-manager.yaml \
 	  --kube-context $(KIND_CONTEXT) --wait=watcher --timeout 5m
+	helm upgrade --install kube-prometheus-stack kube-prometheus-stack --repo https://prometheus-community.github.io/helm-charts \
+	  --version $(KUBE_PROMETHEUS_STACK_VERSION) -n monitoring --create-namespace -f infra/kind/addons/kube-prometheus-stack.yaml \
+	  --kube-context $(KIND_CONTEXT) --wait=watcher --timeout 10m
 	$(KUBECTL) apply -f infra/kind/platform/
 	$(KUBECTL) wait --for=condition=Accepted gatewayclass/eg --timeout=120s
 	$(KUBECTL) -n gateway wait --for=condition=Ready certificate/app-localhost --timeout=120s
 	$(KUBECTL) -n gateway wait --for=condition=Programmed gateway/public --timeout=180s
+	$(KUBECTL) -n monitoring rollout status deployment/alert-sink --timeout=180s
 
 # The web image bakes in its API URL (/api: same origin, through the Gateway) and the Clerk
 # publishable key. Both are public; secrets are runtime-only and never reach an image.

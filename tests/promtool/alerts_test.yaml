@@ -1,0 +1,57 @@
+# promtool unit tests for the shared alert rules (run: make alerts-test).
+# ApiDown changed in step 6F from `up{job="p2-api"} == 0` to `absent(up{job="p2-api"} == 1)`:
+# on Kubernetes an api scaled to zero has no scrape targets, so there is no `up` series at all
+# and the old expression could never fire.
+rule_files:
+  - ../../ops/helm/p2-recommender/files/alerts.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - name: ApiDown fires with zero replicas (no scrape targets, no up series)
+    interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ApiDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "API is down: no replica is up and scrapeable"
+
+  - name: ApiDown fires when every replica is down
+    interval: 1m
+    input_series:
+      - series: 'up{job="p2-api", instance="10.0.0.1:2011"}'
+        values: "0x5"
+      - series: 'up{job="p2-api", instance="10.0.0.2:2011"}'
+        values: "0x5"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ApiDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "API is down: no replica is up and scrapeable"
+
+  - name: ApiDown stays quiet while one replica is up
+    interval: 1m
+    input_series:
+      - series: 'up{job="p2-api", instance="10.0.0.1:2011"}'
+        values: "0x5"
+      - series: 'up{job="p2-api", instance="10.0.0.2:2011"}'
+        values: "1x5"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ApiDown
+        exp_alerts: []
+
+  - name: ApiDown waits out its 2-minute "for" before firing
+    interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ApiDown
+        exp_alerts: []

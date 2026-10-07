@@ -1,0 +1,108 @@
+# Alertmanager's test receiver on kind (todo 6.5.4). It logs one line per alert it receives:
+#   kubectl -n monitoring logs deploy/alert-sink
+# Local on purpose: the plan's webhook.site would send alert payloads to a third party.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alert-sink
+  namespace: monitoring
+data:
+  sink.py: |
+    import json
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+
+    class Sink(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length", 0))
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            for alert in payload.get("alerts", []):
+                labels = alert.get("labels", {})
+                print(json.dumps({
+                    "status": alert.get("status"),
+                    "alertname": labels.get("alertname"),
+                    "severity": labels.get("severity"),
+                    "namespace": labels.get("namespace"),
+                    "startsAt": alert.get("startsAt"),
+                    "summary": alert.get("annotations", {}).get("summary"),
+                }), flush=True)
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *args):  # one line per alert, not per request
+            pass
+
+
+    HTTPServer(("", 8080), Sink).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alert-sink
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: alert-sink
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alert-sink
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alert-sink
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sink
+          image: python:3.12-alpine
+          command: ["python", "/app/sink.py"]
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: http
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: app
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: app
+          configMap:
+            name: alert-sink
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alert-sink
+  namespace: monitoring
+spec:
+  selector:
+    app.kubernetes.io/name: alert-sink
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

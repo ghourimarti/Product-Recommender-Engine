@@ -19,7 +19,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "p2.labels" . | nindent 8 }}
+        {{- include "p2.podLabels" . | nindent 8 }}
         app.kubernetes.io/component: dynamodb
     spec:
       automountServiceAccountToken: false

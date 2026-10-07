@@ -8,9 +8,9 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
-# Alert rules. These existed as a file (ops/observability/alerts.yaml) but were NEVER loaded —
-# Prometheus had no rule_files section, so no alert could ever fire. Mounted read-only by the
-# compose file.
+# Alert rules. These existed as a file but were NEVER loaded — Prometheus had no rule_files
+# section, so no alert could ever fire. Mounted read-only by the compose file from
+# ops/helm/p2-recommender/files/alerts.yaml (shared with Kubernetes).
 rule_files:
   - /etc/prometheus/alerts.yaml
 

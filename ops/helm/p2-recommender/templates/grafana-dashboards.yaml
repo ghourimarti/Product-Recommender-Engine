@@ -1,0 +1,13 @@
+{{- if .Values.monitoring.enabled }}
+{{- /* Dashboards for Grafana's sidecar, which loads every ConfigMap labelled grafana_dashboard="1".
+files/dashboards/ is the single source: compose provisions the same JSON files. */}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: p2-grafana-dashboards
+  labels:
+    {{- include "p2.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  {{- (.Files.Glob "files/dashboards/*.json").AsConfig | nindent 2 }}
+{{- end }}

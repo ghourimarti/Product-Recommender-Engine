@@ -28,3 +28,6 @@ qdrant:
 
 redis:
   storageClassName: standard
+
+monitoring:
+  enabled: true # `make kind-addons` installs kube-prometheus-stack, which provides the CRDs

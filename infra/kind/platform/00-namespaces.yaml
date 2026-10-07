@@ -5,6 +5,8 @@
 # p2: the app. Pod Security Admission enforces the "restricted" profile (the chart was built
 #   and dry-run against it in 6C/6D), and the gateway-access label lets this namespace attach
 #   HTTPRoutes to Gateway gateway/public. Namespaces without the label can't.
+# monitoring: kube-prometheus-stack + the alert sink. "privileged" on purpose and stated, not
+#   implied: node-exporter needs the host's network, PID namespace and root filesystem.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -23,3 +25,10 @@ metadata:
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/warn-version: v1.36
     gateway-access: public
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    pod-security.kubernetes.io/enforce: privileged

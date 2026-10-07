@@ -194,6 +194,15 @@ seed:
       cpu: "1"
       memory: 1Gi
 
+# Prometheus Operator objects for the app (step 6F): a ServiceMonitor for the api, the alert rules
+# from files/alerts.yaml (PrometheusRule) and the dashboards from files/dashboards/ (a ConfigMap
+# for the Grafana sidecar). Off by default because they need the operator's CRDs
+# (kube-prometheus-stack); each environment turns them on.
+monitoring:
+  enabled: false
+  jobName: p2-api # the job label compose uses too, so the rules and dashboards work unchanged
+  scrapeInterval: 15s
+
 # Default-deny ingress for every pod in the release, plus one allow per real traffic path.
 networkPolicy:
   enabled: true

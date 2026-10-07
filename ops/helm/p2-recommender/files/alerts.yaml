@@ -1,4 +1,7 @@
-# Prometheus alert rules — loaded via `rule_files` in infra/compose/prometheus.yml.
+# Prometheus alert rules: the single source for every environment.
+#   compose:    mounted by infra/compose/docker-compose.observability.yml (rule_files in prometheus.yml)
+#   Kubernetes: the chart wraps this file in a PrometheusRule (templates/prometheusrule.yaml)
+# Both scrape the api as job="p2-api", so the expressions are the same everywhere.
 #
 # NOTE: this file previously existed but was NEVER loaded (prometheus.yml had no `rule_files`
 # section), so no alert could ever fire. It is now mounted and loaded.
@@ -49,12 +52,15 @@ groups:
         annotations:
           summary: "Shopping source failing — users are seeing a degraded experience"
 
+      # "No replica is up", not `up == 0`: on Kubernetes an api scaled to zero has no scrape
+      # targets at all, so no `up` series exists and `up == 0` could never fire. This form fires
+      # when every target is down AND when there are no targets; it means the same in compose.
       - alert: ApiDown
-        expr: up{job="p2-api"} == 0
+        expr: absent(up{job="p2-api"} == 1)
         for: 2m
         labels: { severity: critical }
         annotations:
-          summary: "API is down / not scrapeable"
+          summary: "API is down: no replica is up and scrapeable"
 
       - alert: HighErrorRate
         expr: |

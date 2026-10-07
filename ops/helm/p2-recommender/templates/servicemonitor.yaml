@@ -1,0 +1,25 @@
+{{- if .Values.monitoring.enabled }}
+{{- /* Prometheus Operator scrape config for the api's /metrics. The job label is pinned to
+monitoring.jobName (p2-api, the name compose uses), so the shared alert rules and dashboards work
+unchanged. The monitoring namespace may reach the api pods (see networkpolicy.yaml). */}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api
+  labels:
+    {{- include "p2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  selector:
+    matchLabels:
+      {{- include "p2.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.monitoring.scrapeInterval }}
+      relabelings:
+        - action: replace
+          targetLabel: job
+          replacement: {{ .Values.monitoring.jobName }}
+{{- end }}

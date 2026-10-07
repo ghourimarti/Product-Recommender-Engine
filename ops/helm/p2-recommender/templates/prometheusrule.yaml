@@ -1,0 +1,12 @@
+{{- if .Values.monitoring.enabled }}
+{{- /* The app's alert rules. files/alerts.yaml is the single source: compose mounts the same file,
+so both environments evaluate identical expressions. */}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: p2-alerts
+  labels:
+    {{- include "p2.labels" . | nindent 4 }}
+spec:
+  {{- .Files.Get "files/alerts.yaml" | nindent 2 }}
+{{- end }}
