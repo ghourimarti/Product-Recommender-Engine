@@ -1,0 +1,116 @@
+# Install test on a real Kubernetes API server (todo 6.8). Every change to the chart or the images
+# proves the chart lints, renders, passes Pod Security "restricted", and comes up healthy on kind.
+# Offline on purpose: no SerpApi, no LLM keys (a dev-auth Secret with dummy values), no paid calls.
+# The full platform (Gateway, monitoring, Argo CD) is exercised locally: docs/runbook-kind.md.
+name: kind
+
+on:
+  pull_request:
+    paths:
+      - "ops/helm/**"
+      - "apps/**"
+      - "packages/**"
+      - "data/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/kind.yml"
+  push:
+    branches: [main]
+    paths:
+      - "ops/helm/**"
+      - "apps/**"
+      - "packages/**"
+      - "data/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/kind.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kind-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install:
+    name: chart lint + install on kind
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CHART: ops/helm/p2-recommender
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm 4 (pinned, as on the workstation)
+        uses: azure/setup-helm@v4
+        with:
+          version: v4.1.4
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2
+
+      - name: ct lint (helm lint + yamllint + Chart.yaml schema, with ci/kind-values.yaml)
+        run: ct lint --charts "$CHART" --validate-maintainers=false --check-version-increment=false
+
+      - name: Create a kind cluster (the node image infra/kind/kind-config.yaml pins)
+        uses: helm/kind-action@v1
+        with:
+          version: v0.32.0
+          node_image: kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
+          cluster_name: ci
+
+      - name: Build the images and load them into the nodes
+        run: |
+          docker build -f apps/api/Dockerfile -t p2-api:ci .
+          docker build apps/web -t p2-web:ci --build-arg NEXT_PUBLIC_API_URL=/api
+          kind load docker-image --name ci p2-api:ci p2-web:ci
+
+      - name: Namespace under Pod Security "restricted" + a dummy dev-auth Secret
+        run: |
+          secret=$(openssl rand -hex 32)
+          echo "::add-mask::$secret"
+          echo "AUTH_DEV_SECRET=$secret" >> "$GITHUB_ENV"
+          kubectl create namespace p2
+          kubectl label namespace p2 pod-security.kubernetes.io/enforce=restricted \
+            pod-security.kubernetes.io/warn=restricted
+          kubectl -n p2 create secret generic p2-secrets \
+            --from-literal=APP_ENV=local \
+            --from-literal=AUTH_DEV_BYPASS=false \
+            --from-literal=AUTH_DEV_SECRET="$secret" \
+            --from-literal=OPENAI_API_KEY=sk-ci-dummy \
+            --from-literal=CLERK_SECRET_KEY=sk_test_ci_dummy
+
+      - name: helm install (Helm 4 waits for readiness and rolls back on failure)
+        run: |
+          helm install p2 "$CHART" -n p2 -f "$CHART/ci/kind-values.yaml" \
+            --rollback-on-failure --wait=watcher --timeout 10m
+
+      - name: Smoke (health, auth fails closed, recommend degrades to its fallback, web)
+        run: |
+          kubectl -n p2 port-forward svc/api 2011:2011 >/dev/null 2>&1 &
+          kubectl -n p2 port-forward svc/web 2012:2012 >/dev/null 2>&1 &
+          sleep 3
+          curl -fsS http://127.0.0.1:2011/health
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:2011/recommend \
+            -H 'Content-Type: application/json' -d '{"query":"headphones","k":3}')
+          test "$code" = 401 || { echo "expected 401 without a token, got $code"; exit 1; }
+          # An HS256 token for the dev-auth API, minted with the standard library only.
+          token=$(python3 -c 'import base64,hashlib,hmac,json,os
+          b64 = lambda raw: base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+          head = b64(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+          body = b64(json.dumps({"sub": "ci-smoke"}).encode())
+          mac = hmac.new(os.environ["AUTH_DEV_SECRET"].encode(), f"{head}.{body}".encode(), hashlib.sha256)
+          print(f"{head}.{body}.{b64(mac.digest())}")')
+          # No OpenAI key and no seeded catalog: the API must still answer, from its popularity fallback.
+          curl -fsS -X POST http://127.0.0.1:2011/recommend -H "Authorization: Bearer $token" \
+            -H 'Content-Type: application/json' -d '{"query":"good bass headphones","k":3}' \
+            | python3 -c 'import json,sys; b=json.load(sys.stdin); assert b["products"], b; print(len(b["products"]), "products")'
+          curl -fsS -o /dev/null -w 'web: HTTP %{http_code}\n' http://127.0.0.1:2012/
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide
+          kubectl -n p2 get events --sort-by=.lastTimestamp | tail -n 40
+          kubectl -n p2 logs -l app.kubernetes.io/instance=p2 --all-containers --prefix --tail=60

@@ -4,7 +4,7 @@
         db services app obs observability langfuse full up upv \
         ps logs down downv seed bootstrap urls wait-api \
         alerts-test helm-lint kind-up kind-down kind-addons kind-images kind-secret kind-deploy \
-        kind-argocd kind-gitops kind-smoke
+        kind-argocd kind-gitops kind-smoke kind-all
 
 # ─── Layered local stack ──────────────────────────────────────────────────────
 #   db             = data stores only    (Qdrant + DynamoDB-local + Redis)
@@ -315,6 +315,10 @@ kind-gitops:    ## Phase 6: push the chart + IMAGE_TAG to the in-cluster git ser
 
 kind-smoke:     ## Phase 6: smoke-test through the Gateway; AGGREGATE=1 spends one live SerpApi search
 	uv run python ops/smoke/smoke.py --auth-mode $(PROFILE) $(if $(AGGREGATE),--aggregate)
+
+# From no cluster to a smoke-tested app in one command (the Phase 6 exit criterion). Helm path;
+# run `make kind-argocd` afterwards to hand the release to GitOps.
+kind-all: kind-up kind-addons kind-images kind-secret kind-deploy kind-smoke   ## Phase 6: from zero to a smoke-tested app
 
 
 # ─── wait-api  (poll API /health after boot; used by full/upv/bootstrap) ──────

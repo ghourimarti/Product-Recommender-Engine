@@ -6,7 +6,7 @@
 
 api:
   autoscaling:
-    maxReplicas: 6 # real nodes: scale-out is bounded by the node pool, not one Docker VM
+    maxReplicas: 6  # real nodes: scale-out is bounded by the node pool, not one Docker VM
 
 qdrant:
   # DO block storage is network-attached, so the volume can follow the pod to another node.

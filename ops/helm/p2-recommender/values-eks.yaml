@@ -13,4 +13,4 @@ qdrant:
   storageClassName: gp3
 
 redis:
-  storageClassName: gp3 # until Phase 8 swaps in-cluster Redis for ElastiCache
+  storageClassName: gp3  # until Phase 8 swaps in-cluster Redis for ElastiCache

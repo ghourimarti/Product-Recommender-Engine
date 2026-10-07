@@ -1,0 +1,92 @@
+# Cluster state on kind after make kind-all + make kind-argocd from zero (2026-10-07).
+# Captured with kubectl; no Secret values are included.
+
+## kubectl get nodes -o wide
+NAME               STATUS   ROLES           AGE   VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE                       KERNEL-VERSION                              CONTAINER-RUNTIME
+p2-control-plane   Ready    control-plane   17m   v1.36.1   172.19.0.4    <none>        Debian GNU/Linux 13 (trixie)   6.18.40.1-microsoft-standard-WSL2 (amd64)   containerd://2.3.1
+p2-worker          Ready    <none>          17m   v1.36.1   172.19.0.3    <none>        Debian GNU/Linux 13 (trixie)   6.18.40.1-microsoft-standard-WSL2 (amd64)   containerd://2.3.1
+p2-worker2         Ready    <none>          17m   v1.36.1   172.19.0.2    <none>        Debian GNU/Linux 13 (trixie)   6.18.40.1-microsoft-standard-WSL2 (amd64)   containerd://2.3.1
+
+## kubectl get all -n p2
+NAME                           READY   STATUS    RESTARTS   AGE
+pod/api-7bd484448d-5v4tw       1/1     Running   0          2m31s
+pod/api-7bd484448d-bz44p       1/1     Running   0          2m31s
+pod/dynamodb-6df475868-8whmb   1/1     Running   0          10m
+pod/qdrant-0                   1/1     Running   0          10m
+pod/redis-0                    1/1     Running   0          10m
+pod/web-6fdc5bcbf6-prmpd       1/1     Running   0          10m
+pod/web-6fdc5bcbf6-zv2c6       1/1     Running   0          10m
+
+NAME                      TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+service/api               ClusterIP   10.96.9.215     <none>        2011/TCP   10m
+service/dynamodb          ClusterIP   10.96.142.218   <none>        8000/TCP   10m
+service/qdrant            ClusterIP   10.96.150.101   <none>        6333/TCP   10m
+service/qdrant-headless   ClusterIP   None            <none>        6333/TCP   10m
+service/redis             ClusterIP   10.96.178.247   <none>        6379/TCP   10m
+service/redis-headless    ClusterIP   None            <none>        6379/TCP   10m
+service/web               ClusterIP   10.96.197.230   <none>        2012/TCP   10m
+
+NAME                       READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/api        2/2     2            2           10m
+deployment.apps/dynamodb   1/1     1            1           10m
+deployment.apps/web        2/2     2            2           10m
+
+NAME                                 DESIRED   CURRENT   READY   AGE
+replicaset.apps/api-7bd484448d       2         2         2       10m
+replicaset.apps/dynamodb-6df475868   1         1         1       10m
+replicaset.apps/web-6fdc5bcbf6       2         2         2       10m
+
+NAME                      READY   AGE
+statefulset.apps/qdrant   1/1     10m
+statefulset.apps/redis    1/1     10m
+
+NAME                                      REFERENCE        TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+horizontalpodautoscaler.autoscaling/api   Deployment/api   cpu: 0%/70%   2         4         2          10m
+
+## kubectl get hpa,pdb,networkpolicy,pvc -n p2
+NAME                                      REFERENCE        TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+horizontalpodautoscaler.autoscaling/api   Deployment/api   cpu: 0%/70%   2         4         2          10m
+
+NAME                             MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
+poddisruptionbudget.policy/api   N/A             1                 1                     10m
+poddisruptionbudget.policy/web   N/A             1                 1                     10m
+
+NAME                                                              POD-SELECTOR                                                                                               AGE
+networkpolicy.networking.k8s.io/api-from-gateway-and-monitoring   app.kubernetes.io/component=api,app.kubernetes.io/instance=p2,app.kubernetes.io/name=p2-recommender        10m
+networkpolicy.networking.k8s.io/default-deny-ingress              app.kubernetes.io/instance=p2,app.kubernetes.io/name=p2-recommender                                        10m
+networkpolicy.networking.k8s.io/dynamodb-from-api                 app.kubernetes.io/component=dynamodb,app.kubernetes.io/instance=p2,app.kubernetes.io/name=p2-recommender   10m
+networkpolicy.networking.k8s.io/qdrant-from-api-and-seed          app.kubernetes.io/component=qdrant,app.kubernetes.io/instance=p2,app.kubernetes.io/name=p2-recommender     10m
+networkpolicy.networking.k8s.io/redis-from-api                    app.kubernetes.io/component=redis,app.kubernetes.io/instance=p2,app.kubernetes.io/name=p2-recommender      10m
+networkpolicy.networking.k8s.io/web-from-gateway                  app.kubernetes.io/component=web,app.kubernetes.io/instance=p2,app.kubernetes.io/name=p2-recommender        10m
+
+NAME                                     STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+persistentvolumeclaim/data-redis-0       Bound    pvc-9da6ec6e-5b1c-40a9-9cc4-d7e0af9a583f   1Gi        RWO            standard       <unset>                 10m
+persistentvolumeclaim/storage-qdrant-0   Bound    pvc-70a06eff-06c6-4691-a5ce-d8e3cadbd31e   2Gi        RWO            standard       <unset>                 10m
+
+## kubectl get gateway,httproute,backendtrafficpolicy -A
+NAMESPACE   NAME                                       CLASS   ADDRESS      PROGRAMMED   AGE
+gateway     gateway.gateway.networking.k8s.io/public   eg      172.19.0.4   True         11m
+
+NAMESPACE   NAME                                     HOSTNAMES           AGE
+p2          httproute.gateway.networking.k8s.io/p2   ["app.localhost"]   10m
+
+NAMESPACE   NAME                                            AGE
+p2          backendtrafficpolicy.gateway.envoyproxy.io/p2   10m
+
+## kubectl get servicemonitor,prometheusrule -n p2
+NAME                                       AGE
+servicemonitor.monitoring.coreos.com/api   10m
+
+NAME                                             AGE
+prometheusrule.monitoring.coreos.com/p2-alerts   10m
+
+## kubectl get applications -n argocd
+NAME   SYNC STATUS   HEALTH STATUS
+p2     Synced        Healthy
+root   Synced        Healthy
+
+## namespace labels (Pod Security)
+NAME         STATUS   AGE   LABELS
+p2           Active   17m   gateway-access=public,kubernetes.io/metadata.name=p2,pod-security.kubernetes.io/enforce-version=v1.36,pod-security.kubernetes.io/enforce=restricted,pod-security.kubernetes.io/warn-version=v1.36,pod-security.kubernetes.io/warn=restricted
+gateway      Active   17m   kubernetes.io/metadata.name=gateway,pod-security.kubernetes.io/enforce-version=v1.36,pod-security.kubernetes.io/enforce=restricted
+monitoring   Active   17m   kubernetes.io/metadata.name=monitoring,name=monitoring,pod-security.kubernetes.io/enforce=privileged

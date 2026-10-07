@@ -30,7 +30,7 @@ image:
   # --set-string, because plain --set turns an all-digit SHA (e.g. 1234567) into a number.
   tag: ""
   pullPolicy: IfNotPresent
-  pullSecrets: [] # e.g. [{name: docr-pull}] for a private registry
+  pullSecrets: []  # e.g. [{name: docr-pull}] for a private registry
 
 # Zero-downtime rollouts: a terminating api/web pod keeps serving this long, while its endpoint
 # removal propagates to every node and the Gateway.
@@ -48,8 +48,8 @@ pdb:
 api:
   image:
     repository: p2-api
-    tag: "" # optional override; empty = image.tag
-  replicas: 2 # only used when autoscaling is disabled (otherwise the HPA owns it)
+    tag: ""  # optional override; empty = image.tag
+  replicas: 2  # only used when autoscaling is disabled (otherwise the HPA owns it)
   # Matches the container's EXPOSE (env-driven: see apps/api/Dockerfile + .env).
   # If you change API_PORT in .env, update this to match.
   port: 2011
@@ -77,20 +77,20 @@ api:
   # 180 s of headroom for a slow start on a busy node before liveness can restart it.
   startupProbe:
     failureThreshold: 36
-  terminationGracePeriodSeconds: 30 # must exceed preStopSleepSeconds + uvicorn's drain time
+  terminationGracePeriodSeconds: 30  # must exceed preStopSleepSeconds + uvicorn's drain time
   securityContext:
-    runAsUser: 10001 # the image's appuser. Numeric on purpose: the image sets USER by name.
+    runAsUser: 10001  # the image's appuser. Numeric on purpose: the image sets USER by name.
     runAsGroup: 10001
-    readOnlyRootFilesystem: true # scratch writes go to an emptyDir at /tmp; models are baked in
+    readOnlyRootFilesystem: true  # scratch writes go to an emptyDir at /tmp; models are baked in
   serviceAccount:
     create: true
     name: p2-api
-    annotations: {} # EKS: the IRSA role ARN goes here (values-eks.yaml, Phase 8)
+    annotations: {}  # EKS: the IRSA role ARN goes here (values-eks.yaml, Phase 8)
 
 web:
   image:
     repository: p2-web
-    tag: "" # optional override; empty = image.tag
+    tag: ""  # optional override; empty = image.tag
   replicas: 2
   # Matches the container's EXPOSE (env-driven: see apps/web/Dockerfile + .env).
   port: 2012
@@ -102,9 +102,9 @@ web:
       cpu: 500m
       memory: 512Mi
   securityContext:
-    runAsUser: 10001 # the image's webuser (USER is set by name in the image)
+    runAsUser: 10001  # the image's webuser (USER is set by name in the image)
     runAsGroup: 10001
-    readOnlyRootFilesystem: true # writes go to emptyDirs at /tmp and /app/.next/cache
+    readOnlyRootFilesystem: true  # writes go to emptyDirs at /tmp and /app/.next/cache
 
 # qdrant.port / redis.port are the ports the IMAGES speak inside the pod (Qdrant 6333,
 # Redis 6379). They're the image contract, not host ports, so leave them on their well-known
@@ -112,7 +112,7 @@ web:
 qdrant:
   image:
     repository: qdrant/qdrant
-    tag: v1.12.4-unprivileged # runs as uid 1000; the plain v1.12.4 image runs as root
+    tag: v1.12.4-unprivileged  # runs as uid 1000; the plain v1.12.4 image runs as root
   port: 6333
   storage: 10Gi
   # Empty = the cluster's default StorageClass. Set it per environment. volumeClaimTemplates
@@ -128,8 +128,8 @@ qdrant:
   securityContext:
     runAsUser: 1000
     runAsGroup: 1000
-    fsGroup: 1000 # makes the PVC writable on storage classes that honour fsGroup
-    readOnlyRootFilesystem: true # data on the PVC; snapshots and /tmp on emptyDirs
+    fsGroup: 1000  # makes the PVC writable on storage classes that honour fsGroup
+    readOnlyRootFilesystem: true  # data on the PVC; snapshots and /tmp on emptyDirs
 
 redis:
   image:
@@ -137,7 +137,7 @@ redis:
     tag: 7.4-alpine
   port: 6379
   storage: 1Gi
-  storageClassName: "" # set per environment, like qdrant.storageClassName
+  storageClassName: ""  # set per environment, like qdrant.storageClassName
   resources:
     requests:
       cpu: 50m
@@ -146,10 +146,10 @@ redis:
       cpu: 250m
       memory: 256Mi
   securityContext:
-    runAsUser: 999 # the image's redis account
+    runAsUser: 999  # the image's redis account
     runAsGroup: 1000
     fsGroup: 1000
-    readOnlyRootFilesystem: true # AOF and snapshots go to the PVC at /data
+    readOnlyRootFilesystem: true  # AOF and snapshots go to the PVC at /data
 
 # North-south routing (Gateway API): one HTTPRoute, same-origin. /api/* goes to the api with the
 # prefix stripped, everything else to web. The platform owns the Gateway (created in step 6E);
@@ -160,8 +160,8 @@ gateway:
   parentRefs:
     - name: public
       namespace: gateway
-  hostnames: [] # empty = every hostname on the Gateway's listener; set per environment
-  apiRequestTimeout: 120s # long enough for a streamed (SSE) answer to finish
+  hostnames: []  # empty = every hostname on the Gateway's listener; set per environment
+  apiRequestTimeout: 120s  # long enough for a streamed (SSE) answer to finish
   # Envoy Gateway's per-route resilience (templates/backendtrafficpolicy.yaml): fail fast on a dead
   # pod, resend only requests that never reached one, and eject failing pods locally.
   resilience:
@@ -185,9 +185,9 @@ dynamodbLocal:
       cpu: 500m
       memory: 512Mi
   securityContext:
-    runAsUser: 1000 # the image's dynamodblocal user (USER is set by name in the image)
+    runAsUser: 1000  # the image's dynamodblocal user (USER is set by name in the image)
     runAsGroup: 1000
-    readOnlyRootFilesystem: true # needs a disk-backed /tmp; see the template
+    readOnlyRootFilesystem: true  # needs a disk-backed /tmp; see the template
 
 # Post-install Job that indexes the product catalog into Qdrant (the in-cluster `make seed`).
 seed:
@@ -209,11 +209,11 @@ seed:
 # (kube-prometheus-stack); each environment turns them on.
 monitoring:
   enabled: false
-  jobName: p2-api # the job label compose uses too, so the rules and dashboards work unchanged
+  jobName: p2-api  # the job label compose uses too, so the rules and dashboards work unchanged
   scrapeInterval: 15s
 
 # Default-deny ingress for every pod in the release, plus one allow per real traffic path.
 networkPolicy:
   enabled: true
-  gatewayNamespace: envoy-gateway-system # where Envoy Gateway runs its proxy pods (step 6E)
-  monitoringNamespace: monitoring # Prometheus scrapes api /metrics from here (step 6F); "" = none
+  gatewayNamespace: envoy-gateway-system  # where Envoy Gateway runs its proxy pods (step 6E)
+  monitoringNamespace: monitoring  # Prometheus scrapes api /metrics from here (step 6F); "" = none

@@ -1,0 +1,29 @@
+# Values for the CI install test (.github/workflows/kind.yml; todo 6.8): a bare kind cluster with
+# no add-ons, no API keys and no paid calls. It catches what breaks at install time: templates,
+# Pod Security, probes, and the wiring between pods. chart-testing (`ct lint`) lints with this file.
+image:
+  tag: ci  # the workflow builds p2-api:ci and p2-web:ci and loads them into the cluster
+  pullPolicy: Never
+
+api:
+  autoscaling:
+    enabled: false  # no metrics-server on the bare cluster
+  replicas: 1
+
+web:
+  replicas: 1
+
+gateway:
+  enabled: false  # no Gateway API CRDs on the bare cluster; the job calls the Services directly
+
+dynamodbLocal:
+  enabled: true
+
+seed:
+  enabled: false  # indexing needs an OpenAI key; without one the API serves its popularity fallback
+
+monitoring:
+  enabled: false  # no Prometheus Operator CRDs
+
+qdrant:
+  storage: 1Gi

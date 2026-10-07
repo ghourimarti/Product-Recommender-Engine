@@ -697,18 +697,25 @@ A clean local → cloud path:
 
 1. **Local Docker** — multi-stage **non-root** images (`api` / `web`) + the 3-file compose mesh;
    `make up` brings up the whole stack; the API image builds and serves `/health`.
-2. **Helm** — a single chart (`ops/helm/p2-recommender`): api/web Deployments + Service + **HPA**,
-   **Qdrant StatefulSet** + PVC, Redis, ServiceAccount (**IRSA** slot), optional ALB Ingress.
+2. **Helm** — one chart (`ops/helm/p2-recommender`) with a values file per environment (kind,
+   DOKS, EKS): api/web Deployments (**HPA**, PDBs, spread across nodes), **Qdrant** and **Redis**
+   StatefulSets on PVCs, a same-origin **Gateway API** route (`/api` → api, `/` → web),
+   NetworkPolicies, an idempotent seed Job, and Prometheus Operator objects. Every pod runs Pod
+   Security **`restricted`**. ServiceAccount with an **IRSA** slot for EKS.
    ```bash
-   make helm-lint                              # helm lint + kubeconform (needs helm)
-   helm install p2 ops/helm/p2-recommender -n p2 --create-namespace
+   make helm-lint                              # helm lint + kubeconform, per environment
    ```
-3. **Terraform** — modular **VPC · EKS · DynamoDB · ElastiCache · S3 · ECR · IRSA**; S3 remote-state
+3. **Kubernetes on kind** (local, $0) — `make kind-all` goes from no cluster to a smoke-tested app
+   behind Envoy Gateway, with cert-manager and kube-prometheus-stack; `make kind-argocd` hands it
+   to **Argo CD**. Production drills pass on it: zero-downtime rollout and git rollback, losing a
+   node, Qdrant and Redis outages, HPA scaling, OOMKill, NetworkPolicies, alerting. See
+   [docs/runbook-kind.md](docs/runbook-kind.md). No real cloud cluster yet: that's Phases 7–8.
+4. **Terraform** — modular **VPC · EKS · DynamoDB · ElastiCache · S3 · ECR · IRSA**; S3 remote-state
    backend stubbed.
    ```bash
    cd infra/terraform && terraform init && terraform validate && terraform plan   # no apply
    ```
-4. **CI/CD** — GitHub Actions, four jobs on every push and PR; currently green:
+5. **CI/CD** — GitHub Actions, four jobs on every push and PR; currently green:
    `quality` (ruff → mypy strict → offline tests → **eval gate**) · `frontend` (`tsc` +
    `next build`) · `security` (**`pip-audit` + `npm audit`, both blocking**) · `integration`
    (real Qdrant/Redis/DynamoDB service containers; key-gated tests auto-skip).
@@ -716,9 +723,12 @@ A clean local → cloud path:
    **or** if our ordering stops beating Google Shopping's own order. It reads recorded fixtures,
    so it needs no services, no keys, and spends no paid SerpApi quota. The static-catalog gate
    needs a seeded Qdrant + `OPENAI_API_KEY`, so it stays local (`make eval-gate`).
+   A separate `kind` workflow installs the chart on a fresh kind cluster for every change to the
+   chart or the images (lint, Pod Security `restricted`, readiness, a smoke test; no API keys).
+   It was added on 2026-10-07 and validated locally; it hasn't run on GitHub yet.
    **CD is a skeleton and has never been executed** (0 runs): tag-triggered, OIDC → AWS (no
    long-lived keys) → build/push both images to ECR → `helm upgrade --install` against EKS.
-   There is no ArgoCD in this repo — the deploy step calls Helm directly.
+   Argo CD runs on kind (Phase 6); the EKS deploy step still calls Helm directly.
 
 Every step above is reproducible with the `make` targets and commands shown.
 
