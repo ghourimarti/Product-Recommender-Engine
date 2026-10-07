@@ -1,0 +1,20 @@
+# Envoy Gateway's controller on kind (todo 6.5.2). Two replicas on different nodes: the proxies get
+# their endpoint updates from this controller, and with a single replica on the node the 6H drill
+# stopped, the surviving proxy kept sending half the traffic to dead pods for the whole outage.
+deployment:
+  replicas: 2
+  pod:
+    # Hard, not ScheduleAnyway: with a soft spread both replicas landed on one node during a
+    # rolling update. matchLabelKeys counts only the current ReplicaSet's pods.
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/instance: eg
+            control-plane: envoy-gateway
+        matchLabelKeys:
+          - pod-template-hash
+podDisruptionBudget:
+  minAvailable: 1

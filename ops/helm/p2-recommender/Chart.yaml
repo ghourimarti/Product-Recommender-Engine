@@ -14,5 +14,7 @@ type: application
 #        labels, so a chart bump no longer restarts every pod.
 # 0.7.0: the seed Job is idempotent (--skip-if-current: re-indexes only when the catalog changed),
 #        so it runs after upgrades too and on every Argo CD sync without blanking the catalog.
-version: 0.7.0
+# 0.8.0: an Envoy Gateway BackendTrafficPolicy on the route: 2 s connect timeout, retries only for
+#        requests that never reached a pod, and passive ejection of failing pods (node-loss drill).
+version: 0.8.0
 appVersion: "0.1.0"

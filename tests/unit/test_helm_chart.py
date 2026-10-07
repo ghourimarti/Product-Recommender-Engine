@@ -299,6 +299,30 @@ def test_http_route_strips_the_api_prefix() -> None:
             assert ref["port"] in {p["port"] for p in services[ref["name"]]["spec"]["ports"]}
 
 
+def test_route_resilience_retries_only_requests_that_never_reached_a_pod() -> None:
+    docs = _manifests("kind")
+    (policy,) = _of_kind(docs, "BackendTrafficPolicy")
+    (route,) = _of_kind(docs, "HTTPRoute")
+    assert policy["spec"]["targetRefs"] == [
+        {
+            "group": "gateway.networking.k8s.io",
+            "kind": "HTTPRoute",
+            "name": route["metadata"]["name"],
+        }
+    ]
+    # Never 5xx/reset: /chat and /aggregate spend LLM tokens and SerpApi searches, so a request
+    # that reached a pod must not be resent.
+    assert set(policy["spec"]["retry"]["retryOn"]["triggers"]) == {
+        "connect-failure",
+        "refused-stream",
+    }
+    assert "httpStatusCodes" not in policy["spec"]["retry"]["retryOn"]
+    passive = policy["spec"]["healthCheck"]["passive"]
+    assert passive["maxEjectionPercent"] <= 50  # never eject every pod
+    disabled = _manifests("kind", "--set", "gateway.resilience.enabled=false")
+    assert not _of_kind(disabled, "BackendTrafficPolicy")
+
+
 @pytest.mark.parametrize("env", ENVS)
 def test_no_ingress_is_rendered(env: str) -> None:
     # The old ALB Ingress forwarded /api/* to FastAPI unstripped; the HTTPRoute replaces it.

@@ -162,6 +162,13 @@ gateway:
       namespace: gateway
   hostnames: [] # empty = every hostname on the Gateway's listener; set per environment
   apiRequestTimeout: 120s # long enough for a streamed (SSE) answer to finish
+  # Envoy Gateway's per-route resilience (templates/backendtrafficpolicy.yaml): fail fast on a dead
+  # pod, resend only requests that never reached one, and eject failing pods locally.
+  resilience:
+    enabled: true
+    connectTimeout: 2s
+    retries: 2
+    ejectAfterGatewayErrors: 3
 
 # In-memory DynamoDB emulator, for kind practice only. Real environments use AWS DynamoDB.
 dynamodbLocal:

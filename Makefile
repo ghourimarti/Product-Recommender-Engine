@@ -257,7 +257,8 @@ kind-addons:    ## Phase 6: metrics-server, Envoy Gateway, cert-manager, kube-pr
 	  --version $(METRICS_SERVER_VERSION) -n kube-system -f infra/kind/addons/metrics-server.yaml \
 	  --kube-context $(KIND_CONTEXT) --wait=watcher --timeout 5m
 	helm upgrade --install eg oci://docker.io/envoyproxy/gateway-helm --version $(ENVOY_GATEWAY_VERSION) \
-	  -n envoy-gateway-system --create-namespace --kube-context $(KIND_CONTEXT) --wait=watcher --timeout 5m
+	  -n envoy-gateway-system --create-namespace -f infra/kind/addons/envoy-gateway.yaml \
+	  --kube-context $(KIND_CONTEXT) --wait=watcher --timeout 5m
 	helm upgrade --install cert-manager cert-manager --repo https://charts.jetstack.io \
 	  --version $(CERT_MANAGER_VERSION) -n cert-manager --create-namespace -f infra/kind/addons/cert-manager.yaml \
 	  --kube-context $(KIND_CONTEXT) --wait=watcher --timeout 5m

@@ -3,7 +3,10 @@
 # Docker Desktop on Windows can't reach LoadBalancer IPs (F12), so the proxy Service is a NodePort
 # on fixed ports 30080/30443, which infra/kind/kind-config.yaml publishes on 127.0.0.1:80/443.
 # externalTrafficPolicy must be Cluster: the published ports land on the control-plane node, and
-# the proxy pod runs on a worker. Envoy Gateway's default (Local) would drop that traffic.
+# the proxy pods run on the workers. Envoy Gateway's default (Local) would drop that traffic.
+#
+# Two proxy replicas on different nodes, with a disruption budget: every request enters through
+# Envoy, so a single replica made one node a single point of failure for the whole app.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: EnvoyProxy
 metadata:
@@ -13,6 +16,23 @@ spec:
   provider:
     type: Kubernetes
     kubernetes:
+      envoyDeployment:
+        replicas: 2
+        pod:
+          # Hard spread (a soft one can put both replicas on one node during a rollout); only the
+          # current ReplicaSet's pods count.
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels:
+                  gateway.envoyproxy.io/owning-gateway-name: public
+                  gateway.envoyproxy.io/owning-gateway-namespace: gateway
+              matchLabelKeys:
+                - pod-template-hash
+      envoyPDB:
+        minAvailable: 1
       envoyService:
         type: NodePort
         externalTrafficPolicy: Cluster

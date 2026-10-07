@@ -1,0 +1,37 @@
+{{- if and .Values.gateway.enabled .Values.gateway.resilience.enabled }}
+{{- /* How Envoy treats the app's pods (Envoy Gateway API). When a pod dies without warning (a node
+loss), Envoy keeps sending it requests until its endpoint is withdrawn, and in the 6H node-loss
+drill the controller that withdraws endpoints died with the node: half the requests failed for the
+whole 6-minute outage. With this policy each Envoy copes on its own:
+  - it gives up on a connection to a dead pod after connectTimeout;
+  - it resends a request ONLY when it never reached a pod (connection failed or refused), which is
+    safe even for POST /chat and /aggregate: nothing ran, so nothing (LLM, SerpApi) is spent twice;
+  - it ejects a pod after a few consecutive gateway errors, without waiting for the control plane,
+    and never more than half of them. */}}
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: p2
+  labels:
+    {{- include "p2.labels" . | nindent 4 }}
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: p2
+  timeout:
+    tcp:
+      connectTimeout: {{ .Values.gateway.resilience.connectTimeout }}
+  retry:
+    numRetries: {{ .Values.gateway.resilience.retries }}
+    retryOn:
+      triggers:
+        - connect-failure
+        - refused-stream
+  healthCheck:
+    passive:
+      consecutiveGatewayErrors: {{ .Values.gateway.resilience.ejectAfterGatewayErrors }}
+      interval: 2s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+{{- end }}
