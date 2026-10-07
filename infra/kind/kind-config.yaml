@@ -1,0 +1,33 @@
+# kind cluster for Phase 6: local, production-like practice. $0 and disposable.
+#
+# Topology: 1 control-plane + 2 workers. Two workers give the drills somewhere to move pods
+# (stop a worker, watch them reschedule) and give topologySpreadConstraints something to spread over.
+#
+# North-south on Docker Desktop for Windows: LoadBalancer IPs on the Docker network can't be
+# reached from the Windows host, so the Gateway (Envoy) is exposed as a NodePort and published
+# on the host by the mappings below. Every node accepts NodePort traffic, so only the
+# control-plane needs the mapping. Bound to 127.0.0.1 so the cluster isn't exposed to the LAN.
+#
+# Node image: pinned by digest (Kubernetes v1.36.1, kind v0.32.0's default) so a recreated
+# cluster is identical. Bump deliberately, together with the kind version.
+#
+# Usage: make kind-up / make kind-down   (cluster "p2" -> kubectl context "kind-p2")
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: p2
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
+    extraPortMappings:
+      - containerPort: 30080 # Envoy Gateway HTTP NodePort  -> http://*.localhost
+        hostPort: 80
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      - containerPort: 30443 # Envoy Gateway HTTPS NodePort -> https://*.localhost
+        hostPort: 443
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+  - role: worker
+    image: kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
+  - role: worker
+    image: kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5

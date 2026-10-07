@@ -1,0 +1,11 @@
+# Default-deny ingress for every pod in np-probe (second half of the probe in
+# netpol-probe.yaml). If the CNI enforces policy, the client's request must now fail.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: np-probe
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress

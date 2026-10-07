@@ -1,0 +1,62 @@
+# Host -> NodePort reachability probe. Disposable.
+#
+# Proves the north-south path the Gateway will use on Docker Desktop for Windows:
+#   Windows 127.0.0.1:80 -> kind extraPortMapping -> control-plane :30080 (NodePort) -> pod
+#
+#   kubectl apply -f infra/kind/nodeport-probe.yaml
+#   kubectl -n reach-probe wait --for=condition=Ready pod/web
+#   kubectl -n reach-probe get endpointslices           # wait until an endpoint is listed
+#   curl.exe -sS -w " [HTTP %{http_code}]" http://127.0.0.1/      # expect: reachable [HTTP 200]
+#   curl.exe -sS -w " [HTTP %{http_code}]" http://app.localhost/  # curl resolves *.localhost itself
+#   kubectl delete namespace reach-probe
+#
+# Findings (2026-10-06):
+#   - The path works end to end: HTTP 200 on both 127.0.0.1 and app.localhost.
+#   - One early request, sent the moment the pod went Ready, failed silently, and a clean re-run
+#     didn't reproduce it. A plausible cause is that kube-proxy programs a Service's endpoints
+#     shortly after the EndpointSlice updates, so a request in that window is refused. That's
+#     unproven, so smoke tests wait for a ready EndpointSlice and retry before declaring failure.
+#   - curl.exe resolves *.localhost to loopback, but .NET (Invoke-WebRequest) doesn't
+#     ("No such host is known"). From PowerShell, use curl.exe or 127.0.0.1 + a Host header.
+#
+# NodePort 30080 is the port Envoy Gateway will own from step 6E; delete this probe first.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: reach-probe
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web
+  namespace: reach-probe
+  labels:
+    app: web
+spec:
+  # busybox httpd runs as PID 1 and ignores SIGTERM, so without this the pod keeps serving
+  # for the default 30 s grace period, and re-applying lands in a still-terminating namespace.
+  terminationGracePeriodSeconds: 1
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+  containers:
+    - name: httpd
+      image: busybox:1.37
+      command: ["sh", "-c", "echo reachable > /tmp/index.html && exec httpd -f -p 8080 -h /tmp"]
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: reach-probe
+spec:
+  type: NodePort
+  selector:
+    app: web
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080

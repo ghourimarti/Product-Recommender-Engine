@@ -1,0 +1,69 @@
+# NetworkPolicy enforcement probe (todo 6.5.8). Disposable; safe on any cluster.
+#
+# Why this exists: every API server ACCEPTS NetworkPolicy objects, but only a CNI that
+# implements them ENFORCES them. An unenforced default-deny is worse than none, because it
+# looks secure and isn't. This probe proves enforcement instead of assuming it.
+#
+#   kubectl apply -f infra/kind/netpol-probe.yaml
+#   kubectl -n np-probe exec client -- wget -qO- -T 3 http://server:8080   # expect: ok
+#   kubectl apply -f infra/kind/netpol-probe-deny.yaml
+#   kubectl -n np-probe exec client -- wget -qO- -T 3 http://server:8080   # expect: timeout
+#   kubectl delete namespace np-probe
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: np-probe
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: server
+  namespace: np-probe
+  labels:
+    app: server
+spec:
+  terminationGracePeriodSeconds: 1 # busybox ignores SIGTERM as PID 1; don't wait 30 s
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+  containers:
+    - name: httpd
+      image: busybox:1.37
+      command: ["sh", "-c", "echo ok > /tmp/index.html && exec httpd -f -p 8080 -h /tmp"]
+      ports:
+        - containerPort: 8080
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 50m, memory: 32Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: server
+  namespace: np-probe
+spec:
+  selector:
+    app: server
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: client
+  namespace: np-probe
+  labels:
+    app: client
+spec:
+  terminationGracePeriodSeconds: 1
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+  containers:
+    - name: client
+      image: busybox:1.37
+      command: ["sleep", "3600"]
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 50m, memory: 32Mi}
