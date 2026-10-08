@@ -1,0 +1,16 @@
+# Blackbox exporter modules. Prometheus probes every service through these (job "probe" in
+# infra/compose/prometheus.yml), so "is X up, and how fast does it answer" is one metric,
+# probe_success / probe_duration_seconds, for every component - including the ones that export
+# no metrics of their own (web, DynamoDB, Langfuse, RedisInsight).
+modules:
+  http_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: ip4
+      valid_status_codes: []  # any 2xx
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
+    tcp:
+      preferred_ip_protocol: ip4

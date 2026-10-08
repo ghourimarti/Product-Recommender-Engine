@@ -1,13 +1,7 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# TIER 1 — DATA  (start first)
-#
-# Everything the API/eval scripts read from or write to: vector DB, chat history,
-# cache. Named volumes are declared here so `make downv` sees them.
-#
-# Same `name:` as the other two compose files → all tiers share ONE docker
-# project + network. Bring them up in any order; api reaches jaeger and vice
-# versa by container name.
-# ─────────────────────────────────────────────────────────────────────────────
+# TIER 1 - DATA: Qdrant (catalog vectors), DynamoDB-local (chat history), Redis (cache,
+# rate limits, SerpApi budget). All three compose files share `name: p2-recommender`: one
+# project, one network, services reach each other by name.
+# Host ports are bound to 127.0.0.1 only: nothing is reachable from the LAN.
 
 name: p2-recommender
 
@@ -16,13 +10,11 @@ services:
     image: qdrant/qdrant:v1.12.4
     container_name: p2-qdrant
     environment:
-      # Enforce QDRANT_API_KEY when one is set. Previously the client SENT an api key while the
-      # server required none, so the setting was a no-op that only produced "api key used with an
-      # insecure connection" warnings. Leave QDRANT_API_KEY empty locally for no auth.
+      # Set = Qdrant enforces it (the api sends it); empty = no auth locally.
       QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
     ports:
-      - "${QDRANT_HTTP_PORT:-2001}:6333"  # HTTP/REST
-      - "${QDRANT_GRPC_PORT:-2002}:6334"  # gRPC
+      - "127.0.0.1:${QDRANT_HTTP_PORT:-2001}:6333"
+      - "127.0.0.1:${QDRANT_GRPC_PORT:-2002}:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
@@ -34,21 +26,25 @@ services:
   dynamodb:
     image: amazon/dynamodb-local:2.5.2
     container_name: p2-dynamodb
+    # In-memory: chat history is practice data and resets with the container.
     command: "-jar DynamoDBLocal.jar -inMemory -sharedDb"
     ports:
-      - "${DYNAMODB_PORT:-2003}:8000"
+      - "127.0.0.1:${DYNAMODB_PORT:-2003}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/8000' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7.4-alpine
     container_name: p2-redis
-    # Persist the cache. Without a volume every restart wiped Redis, so the aggregate cache was
-    # cold again and the next queries re-spent REAL SerpApi searches (metered, 250/month).
-    # AOF gives durability without a heavy config.
+    # AOF on a volume: a cold cache would re-spend real (metered) SerpApi searches.
     command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-2004}:6379"
     volumes:
       - redis_data:/data
-    ports:
-      - "${REDIS_PORT:-2004}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

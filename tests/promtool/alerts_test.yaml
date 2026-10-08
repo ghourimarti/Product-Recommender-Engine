@@ -55,3 +55,34 @@ tests:
       - eval_time: 1m
         alertname: ApiDown
         exp_alerts: []
+
+  # Every Groq call fails (expired key) while OpenAI answers: users see no error, only cost.
+  - name: LLMProviderFailing fires for the failing provider only
+    interval: 1m
+    input_series:
+      - series: 'llm_requests_total{provider="groq", model="m", status="error"}'
+        values: "0+2x30"
+      - series: 'llm_requests_total{provider="openai", model="gpt-4o", status="ok"}'
+        values: "0+2x30"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: LLMProviderFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              provider: groq
+            exp_annotations:
+              summary: "LLM provider groq is failing; the next provider in the chain answers instead"
+              description: "Check the provider's API key and model. Fallback answers may cost more."
+
+  - name: LLMProviderFailing stays quiet for an occasional error
+    interval: 1m
+    input_series:
+      - series: 'llm_requests_total{provider="groq", model="m", status="error"}'
+        values: "0x30"
+      - series: 'llm_requests_total{provider="groq", model="m", status="ok"}'
+        values: "0+3x30"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: LLMProviderFailing
+        exp_alerts: []

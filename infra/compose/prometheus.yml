@@ -1,25 +1,107 @@
-# Prometheus scrape config for the local P2 stack.
+# Prometheus scrape config for the local stack. Targets are compose service names on the shared
+# network, with their CONTAINER ports. Reload after editing: `make up-obs` (POST /-/reload).
 #
-# Targets use CONTAINER NAMES on the shared project network (`p2-recommender`).
-# The port 2011 must match API_PORT in .env — if you change API_PORT, update
-# both this file and the api service (they'd otherwise disagree).
+# api:2011 must match API_PORT in .env: the api container listens on that same port.
 
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
-# Alert rules. These existed as a file but were NEVER loaded — Prometheus had no rule_files
-# section, so no alert could ever fire. Mounted read-only by the compose file from
-# ops/helm/p2-recommender/files/alerts.yaml (shared with Kubernetes).
+# One rules file for compose and Kubernetes: ops/helm/p2-recommender/files/alerts.yaml.
 rule_files:
   - /etc/prometheus/alerts.yaml
 
 scrape_configs:
-  - job_name: 'prometheus'
+  # ---- the application ------------------------------------------------------------------
+  - job_name: p2-api
+    static_configs:
+      - targets: ['api:2011']
+
+  # ---- data stores ----------------------------------------------------------------------
+  - job_name: qdrant
+    # Qdrant enforces QDRANT_API_KEY on /metrics too. The compose entrypoint writes the key to
+    # this file at start-up (Prometheus can't read env vars in its config); empty = no auth.
+    authorization:
+      type: Bearer
+      credentials_file: /tmp/qdrant_api_key
+    static_configs:
+      - targets: ['qdrant:6333']
+
+  - job_name: redis
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels: {instance: app-redis}
+      - targets: ['langfuse-redis-exporter:9121']
+        labels: {instance: langfuse-redis}
+
+  - job_name: postgres
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels: {instance: langfuse-postgres}
+
+  - job_name: clickhouse
+    static_configs:
+      - targets: ['langfuse-clickhouse:9363']
+        labels: {instance: langfuse-clickhouse}
+
+  - job_name: minio
+    metrics_path: /minio/v2/metrics/cluster
+    static_configs:
+      - targets: ['langfuse-minio:9000']
+        labels: {instance: langfuse-minio}
+
+  # ---- the observability tier itself ----------------------------------------------------
+  - job_name: prometheus
     static_configs:
       - targets: ['localhost:9090']
 
-  - job_name: 'p2-api'
-    metrics_path: /metrics
+  - job_name: grafana
     static_configs:
-      - targets: ['api:2011']
+      - targets: ['grafana:3000']
+
+  - job_name: jaeger
+    static_configs:
+      - targets: ['jaeger:14269']
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+  # ---- health of EVERY service, via the blackbox exporter -------------------------------
+  # The target is the URL (http_2xx) or host:port (tcp_connect) to probe; relabelling turns it
+  # into the probe's parameter and keeps it as the `instance` label.
+  - job_name: probe-http
+    metrics_path: /probe
+    params: {module: [http_2xx]}
+    static_configs:
+      - targets:
+          - http://api:2011/health
+          - http://web:2012/
+          - http://qdrant:6333/readyz
+          - http://langfuse-web:3000/api/public/health
+          - http://langfuse-autologin:8080/healthz
+          - http://langfuse-minio:9000/minio/health/live
+          - http://langfuse-clickhouse:8123/ping
+          - http://jaeger:16686/
+          - http://prometheus:9090/-/healthy
+          - http://grafana:3000/api/health
+          - http://redisinsight:5540/api/health
+          - http://cadvisor:8080/healthz
+    relabel_configs: &probe_relabel
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  - job_name: probe-tcp
+    metrics_path: /probe
+    params: {module: [tcp_connect]}
+    static_configs:
+      - targets:
+          - dynamodb:8000
+          - redis:6379
+          - langfuse-redis:6379
+          - langfuse-postgres:5432
+    relabel_configs: *probe_relabel

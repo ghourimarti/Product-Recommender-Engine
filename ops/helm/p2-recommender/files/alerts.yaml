@@ -62,6 +62,19 @@ groups:
         annotations:
           summary: "API is down: no replica is up and scrapeable"
 
+      # The fallback chain hides a dead provider: users still get answers, from the next (paid)
+      # provider. Found 2026-10-07: an expired Groq key had every answer served by gpt-4o.
+      - alert: LLMProviderFailing
+        expr: |
+          sum by (provider) (increase(llm_requests_total{status="error"}[15m]))
+            / clamp_min(sum by (provider) (increase(llm_requests_total[15m])), 1) > 0.5
+          and sum by (provider) (increase(llm_requests_total[15m])) >= 3
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "LLM provider {{ $labels.provider }} is failing; the next provider in the chain answers instead"
+          description: "Check the provider's API key and model. Fallback answers may cost more."
+
       - alert: HighErrorRate
         expr: |
           sum(rate(http_requests_total{status=~"5.."}[5m]))

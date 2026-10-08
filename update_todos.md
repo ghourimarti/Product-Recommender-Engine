@@ -1,6 +1,6 @@
 # Update TODOs: P2 ProductIQ (Enterprise2)
 
-> **As of:** 2026-10-07 · **HEAD:** `ebd44d6` on `origin` (your commit of this file; `mirror` is at `8ff4c76`) · branch `main` · 72 commits · 🆕 **Phase 6 ✅ complete** (9 commits pushed, `kind` CI green). Two follow-up commits ready locally (§10 D-16, D-19)
+> **As of:** 2026-10-07 · **HEAD:** `72db2fb` on `origin` (`mirror` is at `8ff4c76`) · branch `main` · 73 commits · 🆕 **Phase 6 ✅ complete**; `CI` (all 4 jobs) and `kind` green on `72db2fb`, CI's first green run since 2026-08-08
 > **How this was built:** I checked every status below against the repo today: code, `ci.yml`,
 > `git log`, a live `pytest --collect-only`, and the reports in `Document/docs/`. When a doc and
 > the code disagree, the code wins, and the mismatch goes in **§10 Drift & bugs**. Vendor prices and
@@ -8,7 +8,7 @@
 > 🆕 **Updated 2026-10-06/07 (Phase 6 session):** progress on 6A–6E, three Phase 6 decisions,
 > new findings, and status marks instead of checkboxes. Items added or changed in that session
 > are marked 🆕.
-> **This file is local-only:** `Document/` is gitignored.
+> 🆕 **Tracked in git since 2026-10-07** (`ebd44d6`, your choice); before that it was local-only.
 
 ### Phase map (revised 2026-10-06)
 
@@ -60,23 +60,22 @@ A status can be followed by a **note**:
 | **7 DigitalOcean DOKS** | ⏳ | New. Blocked on decision 7.0 (credit status, history store) |
 | **8 AWS EKS** | 🔄 | Terraform validates and a `tfplan` exists. **Never applied; `cd.yml` has 0 runs** |
 | **9 Portfolio** | 🔄 | Writeup exists but is **pre-pivot** (says 83 tests, no aggregator) |
-| Drift & bugs found today | ⏳ | 🆕 20 items (11 + 9 found in the Phase 6 session; D-16 and D-19 fixed locally, awaiting your commit), mostly cheap and offline (§10) |
+| Drift & bugs found today | ⏳ | 🆕 20 items (11 + 9 found in the Phase 6 session; D-16 and D-19 fixed and verified on GitHub), mostly cheap and offline (§10) |
 | Roadmap | ⏳ | 9 items (§11) |
 
 ## 0.1 Do next (priority order)
 
-1. 🆕 **Commit + push the two follow-up commits** (D-16 dependency fixes, D-19 `kind-up`), then confirm the
-   `CI` workflow on `origin` is green for the first time since 2026-08-08.
-2. 🆕 **Unlock GitHub Actions on the mirror account** (§10 D-17): `ghourimartin` is locked over a billing
-   issue, so no job there has run since July. Fix the billing, or disable Actions on that repo.
-3. 🆕 **Decide on Tailwind v4** (§10 D-18): the remaining npm advisories are build-time only.
-4. **§10 drift fixes.** One sitting, offline, $0 (🆕 now 20 items, 2 already fixed).
-5. **Add Trivy + bandit to CI (§5).** `hardening.md` says CI runs them. It doesn't.
-6. **Decision 7.0.** Check whether your DO credit still exists (it probably doesn't). Pick a budget or vendor.
-7. **Phase 7: DOKS.** First real cluster: real load balancer, storage, DNS, TLS, GitOps, alerting, backups.
-8. **R2 E2E tests + R3 LangChain/Langfuse upgrade (§11).** R3 may be needed before 7.0.6.
-9. **Phase 8: EKS.** Same chart, AWS-native extras (IRSA / Pod Identity, ALB, Secrets Manager).
-10. **Phase 9: portfolio.** Draft now; add evidence after each deployment phase.
+1. 🆕 **Mirror** (§10 D-17): it's at `8ff4c76`, 2 commits behind `origin`, and its GitHub Actions are locked
+   over a billing issue on `ghourimartin`. Fix the billing (or disable Actions there), and push it.
+2. 🆕 **Decide on Tailwind v4** (§10 D-18): the remaining npm advisories are build-time only.
+3. **§10 drift fixes.** One sitting, offline, $0 (🆕 18 open of 20).
+4. **Add Trivy + bandit to CI (§5).**
+   `hardening.md` says CI runs them. It doesn't.
+5. **Decision 7.0.** Check whether your DO credit still exists (it probably doesn't). Pick a budget or vendor.
+6. **Phase 7: DOKS.** First real cluster: real load balancer, storage, DNS, TLS, GitOps, alerting, backups.
+7. **R2 E2E tests + R3 LangChain/Langfuse upgrade (§11).** R3 may be needed before 7.0.6.
+8. **Phase 8: EKS.** Same chart, AWS-native extras (IRSA / Pod Identity, ALB, Secrets Manager).
+9. **Phase 9: portfolio.** Draft now; add evidence after each deployment phase.
 
 ---
 
@@ -763,7 +762,7 @@ no user hits the rate limit), failing on any non-200; `MODE=cold` makes every qu
   - ✅ 🆕 One target from zero: `make kind-all`. ✅ Every drill in 6.7 passes. ✅ CI kind job green (2026-10-07).
   - 🆕 `make kind-all` failed at its first step when the cluster already existed (`kind create` refuses), so
     "each step re-runs safely" in the runbook wasn't true for `kind-up`. ✅ Fixed: `kind-up` now skips an
-    existing cluster (tested in cmd.exe and Git Bash); awaiting your commit (§10 D-19).
+    existing cluster (tested in cmd.exe and Git Bash); committed in `72db2fb` (§10 D-19).
 
 ---
 
@@ -992,10 +991,10 @@ aggregator, no remediation story.
 | 🆕 D-13 | `.env`, Step 6.5, D19 | `ANTHROPIC_API_KEY` is now set, so "the Anthropic leg was never called live (no key)" and "the judge is gpt-4o because there's no Anthropic key" are stale | Make one live fallback call to close 6.5; decide whether to move the judge off-family | 15 min |
 | 🆕 D-14 | `.github/workflows/cd.yml:50-56` | `helm upgrade --install ... --wait --atomic`: `--atomic` is deprecated in Helm 4 (use `--rollback-on-failure`), and `cd.yml` doesn't pin Helm, so the runner image decides v3 vs v4 | Pin Helm with `azure/setup-helm`; switch to `--rollback-on-failure` once on Helm 4 | 10 min |
 | 🆕 D-15 | `Makefile` (`wait-api`, `urls`, `upv`, `full`, `bootstrap`) | Their recipes use sh syntax (`set -a; . ./.env`, `$$(seq …)`). Run from PowerShell, GNU make finds no sh.exe and uses cmd.exe, so they fail (F19; inferred from the 6E probe, not run) | Run them from Git Bash, or move the logic into a script like the kind targets | 15 min |
-| 🆕 D-16 | `uv.lock`, `apps/web/package*.json`, `ci.yml` | **`CI` has been red on `origin` since 2026-08-08** (the README said "currently green"): the blocking `pip-audit` found 21 new advisories in urllib3 2.7.0, cryptography 49.0.0, h2 4.4.0 and pyjwt 2.13.0. Behind it, never reached: `npm audit` had **3 critical RCEs in `next` 16.2.12** (in the shipped image) plus build-tool highs | ✅ Fixed locally 2026-10-07: urllib3 2.8.0, cryptography 50.0.2, h2 4.4.1, pyjwt 2.15.1 (floor raised in `pyproject.toml`); next 16.3.8 + sharp 0.35.5 and 4 other npm patches. pip-audit on Linux: 0 found (the old lock reproduces CI's 21); `npm audit --omit=dev`: 0. 197 tests, eval gate, `tsc`, `next build`, both images build and run. ⏳ Commit + push, then confirm `CI` green | done |
+| 🆕 D-16 | `uv.lock`, `apps/web/package*.json`, `ci.yml` | **`CI` has been red on `origin` since 2026-08-08** (the README said "currently green"): the blocking `pip-audit` found 21 new advisories in urllib3 2.7.0, cryptography 49.0.0, h2 4.4.0 and pyjwt 2.13.0. Behind it, never reached: `npm audit` had **3 critical RCEs in `next` 16.2.12** (in the shipped image) plus build-tool highs | ✅ Fixed locally 2026-10-07: urllib3 2.8.0, cryptography 50.0.2, h2 4.4.1, pyjwt 2.15.1 (floor raised in `pyproject.toml`); next 16.3.8 + sharp 0.35.5 and 4 other npm patches. pip-audit on Linux: 0 found (the old lock reproduces CI's 21); `npm audit --omit=dev`: 0. 197 tests, eval gate, `tsc`, `next build`, both images build and run. ✅ Committed in `72db2fb`: `CI` green on GitHub, all 4 jobs, the first green run since 2026-08-08 | done |
 | 🆕 D-17 | GitHub account `ghourimartin` (the mirror) | Every Actions job on the mirror fails in seconds: "The job was not started because your account is locked due to a billing issue." Every mirror run since July is red | **You:** fix the payment/billing issue on that account, or disable Actions on the mirror repo | 5 min |
 | 🆕 D-18 | `apps/web` (Tailwind CSS 3.4.19) | 5 high + 2 moderate npm advisories remain (braces, chokidar, micromatch, fast-glob, postcss-*), all build-time only via Tailwind v3; npm's only fix is Tailwind v4 (breaking). The CI npm gate now audits runtime deps (`--omit=dev`), like the Python gate | Migrate to Tailwind v4 and check every page visually; then `npm audit` is clean without `--omit=dev` | 1–2 h |
-| 🆕 D-19 | `Makefile` `kind-up` | `make kind-all` stopped at step 1 when the cluster already existed, though the runbook says each step re-runs safely | ✅ Fixed locally: `kind-up` skips an existing cluster (cmd.exe + Git Bash tested). ⏳ Commit | done |
+| 🆕 D-19 | `Makefile` `kind-up` | `make kind-all` stopped at step 1 when the cluster already existed, though the runbook says each step re-runs safely | ✅ Fixed in `72db2fb`: `kind-up` skips an existing cluster (cmd.exe + Git Bash tested) | done |
 | 🆕 D-20 | `Makefile` `KUBECONFORM` | kubeconform downloads schemas from GitHub on every run; one run of `make helm-lint` reported `Errors: 1` from a failed fetch, and the re-runs were all valid | Add `-cache` with a local schema dir, so lint doesn't depend on the network | 10 min |
 
 ---

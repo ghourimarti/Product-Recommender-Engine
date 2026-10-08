@@ -1,12 +1,20 @@
-# Grafana datasource provisioning.
-# Grafana previously booted EMPTY — no datasource, no dashboards — so its panels could not query
-# anything and it was useless to open. Provisioned as code so it survives volume wipes.
+# Grafana datasources, provisioned so Grafana opens ready to query: nothing to add by hand.
+# Fixed uids, so dashboards reference them by uid and survive a volume wipe.
 apiVersion: 1
 
 datasources:
   - name: Prometheus
+    uid: prometheus
     type: prometheus
     access: proxy
-    url: http://prometheus:9090   # container-name resolution on the shared compose network
+    url: http://prometheus:9090
     isDefault: true
+    editable: false
+
+  # Request traces in Grafana: Explore > Jaeger, service p2-recommender.
+  - name: Jaeger
+    uid: jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
     editable: false

@@ -425,7 +425,7 @@ def test_prometheus_rule_is_the_shared_rules_file() -> None:
     shared = yaml.safe_load((CHART / "files" / "alerts.yaml").read_text(encoding="utf-8"))
     assert rule["spec"]["groups"] == shared["groups"]
     alerts = {r["alert"]: r for group in rule["spec"]["groups"] for r in group["rules"]}
-    assert len(alerts) == 10
+    assert len(alerts) == 11
     # Scaled to zero, the api has no scrape targets and no `up` series: only absent() fires.
     assert alerts["ApiDown"]["expr"].startswith("absent(")
 

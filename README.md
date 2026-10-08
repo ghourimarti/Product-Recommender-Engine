@@ -268,274 +268,163 @@ P2-Product-Recommendion-engine/            # uv workspace (monorepo)
 
 ## 🚀 Quick Start
 
-> The repo is **driven by a `Makefile`** (`make help`-style targets below). It wraps a **4-layer
-> docker-compose** stack under one project. All host ports live in `.env` (a `2001–2018` scheme). `2013–2018` back the Langfuse infra (Postgres/ClickHouse/
-> Redis/MinIO) — published so pgAdmin/DBeaver/psql/MinIO-console work directly on the host.
+> The repo is **driven by a `Makefile`** (`make help` lists every target by section). One command
+> brings up the compose stack (app, data stores, observability: 21 containers) **and** a local
+> Kubernetes cluster (kind) running the same app behind a Gateway. Host ports live in `.env`
+> (`2001–2020`), all bound to `127.0.0.1`.
 
 ### Prerequisites
 - **Python 3.12** and [`uv`](https://docs.astral.sh/uv/) (uv provisions 3.12 for you)
-- **Docker + Docker Compose**
-- **Node 22 + npm** (only for native web dev; the Docker path builds the web for you)
-- A **`SERPAPI_API_KEY`** — required for the **live aggregator**, which is what the web UI calls.
-  Free plan is **250 searches/month** and every cache miss spends one; a global day/month budget
-  guard is on by default. Without it the UI returns an honest `source_unavailable`, not results.
-- An **`OPENAI_API_KEY`** — required for the **catalog path** (embeddings for `make seed`,
-  `/recommend`, `/chat`) and used as an LLM fallback rung. `GROQ_API_KEY` (primary LLM) and
-  `ANTHROPIC_API_KEY` are optional; without any LLM key, ranking still works, reasons don't.
+- **Docker Desktop** with a **12 GB** VM (`~/.wslconfig` on Windows): compose ~4 GB + lean kind
+  ~4.2 GB. With less, `make up` still runs compose and skips kind, saying why.
+- **kind 0.32, kubectl, Helm 4** for the Kubernetes half (`KIND=0` skips it)
+- **GNU make**. Recipes are shell-neutral: PowerShell (cmd.exe) and Git Bash both work.
+- An **`OPENAI_API_KEY`** (embeddings for `make seed` and every query; LLM fallback rung) and a
+  **Clerk** app (sign-in). **`SERPAPI_API_KEY`** feeds the live aggregator the web UI calls: free
+  plan = 250 searches/month, every cache miss spends one, a day/month budget guard is on.
+  `GROQ_API_KEY` (primary LLM) and `ANTHROPIC_API_KEY` (last rung) are optional.
 
 ### 1 · Install & configure
 ```bash
 git clone <your-repo-url> productiq && cd productiq
-uv sync                          # create the venv (Python 3.12) + install every package
-cp .env.example .env             # then set OPENAI_API_KEY (+ optionally GROQ/ANTHROPIC/CLERK)
+uv sync                          # the venv (Python 3.12) + every package
+cp .env.example .env             # then fill in the keys: one boxed section per service
 ```
 
-### 2 · Quality gate
+### 2 · Run everything
 ```bash
-make check                       # ruff lint + mypy (strict) + pytest   → the green gate
-# or individually: make lint · make type · make test
+make upv          # FROM ZERO: wipe volumes + cluster, rebuild, seed, start compose + kind (~15 min)
+make up           # day to day: compose + kind, data kept (KIND=0: compose only)
+make urls         # every URL with a live up/down mark (no credentials)
+make service_ls   # the same + local logins: pgAdmin, MinIO, Langfuse, Grafana admin, ...
+make verify       # call every component: PASS / WARN / FAIL each (LIVE=1 also pings each LLM)
+make down         # stop compose + kind nodes, keep all data   (make downv deletes it all)
 ```
 
-### 3 · Build the grounding index + score quality
+Nothing asks for a login: **Grafana** is anonymous with 5 provisioned dashboards, **Langfuse** is
+provisioned from `.env` and http://localhost:2019 signs you in, **RedisInsight** has both Redis
+databases registered. Every LLM call is traced to Langfuse and counted in Prometheus
+(`llm_requests_total` by provider and status), so a dead provider key shows up on a dashboard and
+as the `LLMProviderFailing` alert, not as a silent fallback bill.
+
+**How to check every component yourself, by browser and by CLI:** [docs/VERIFY.md](docs/VERIFY.md).
+
+### 3 · Quality gate and evals
 ```bash
-make db                          # data tier: Qdrant + DynamoDB-local + Redis
-make seed                        # aggregate reviews → products, then embed + index into Qdrant
-make eval-aggregator             # ranking eval for the SHIPPED /aggregate path (offline, 0 API cost)
-make eval-ranking                # NDCG@3 / MRR / Recall@3 (+ reranker A/B), static-catalog path
-make eval-rag                    # answer-quality (custom LLM judge)
-# Each writes a markdown report to reports/ (tracked, so the evidence is publishable) and prints
-# aggregates to stdout. Frozen baselines the CI gate compares against are tracked at
-# packages/evaluation/{aggregator,ranking}/baseline.json
-# reports/aggregator-eval.md is committed and regenerates offline with zero API cost.
+make check                       # ruff lint + mypy (strict) + pytest (offline)
+make eval-aggregator             # ranking eval of the shipped /aggregate path (offline, $0)
+make eval-ranking                # NDCG@3 / MRR / Recall@3 (+ reranker A/B), static catalog
+make eval-rag                    # answer quality (custom LLM judge; spends tokens)
+# Reports land in reports/; CI baselines are packages/evaluation/{aggregator,ranking}/baseline.json
 ```
 
-### 4 · Run the full stack — **Docker (recommended)**
+### Service map
 
-**Fastest path — one command, from empty to fully seeded:**
-```bash
-make upv          # FROM ZERO: wipe volumes → build → start ALL 16 services → seed catalog
-make urls         # print every UI URL (ports read from .env)
-```
-> `upv` is the cold-boot button: it wipes named volumes, brings up the data tier and waits for
-> health, seeds the catalog into Qdrant (needs `OPENAI_API_KEY`), then builds + starts the app and
-> observability/Langfuse tiers. Expect **~5–8 min** on a cold machine (Langfuse migrations continue
-> ~30–90 s in the background after it returns). After boot, `make up` polls `/health` and prints a
-> formatted service-directory banner with every URL + login (same content as `make urls`).
+`make urls` prints this with live status; `make service_ls` adds the logins.
 
-**Or bring it up tier by tier** (start small, layer up — all tiers share one Docker project):
-```bash
-make db           # tier 1 — data stores:  Qdrant + DynamoDB-local + Redis
-make seed         # index the catalog into Qdrant  (run once, after db is up)
-make app          # tier 2 — build + start API + web  (data + app)
-make obs          # tier 3 — Jaeger + Prometheus + Grafana + RedisInsight + Langfuse
-make urls         # print every UI URL
-```
-
-📋 **Full command reference is in [Make Commands](#-make-commands) below.**
-
-**Service map** (host ports from `.env`; the same block prints on-terminal after `make up`):
-
-| Service | URL / connection |
+| Component | URL / connection |
 |---|---|
-| 🖥 **Web** (Next.js) | http://localhost:2012 |
-| 📡 **API** | http://localhost:2011 · docs http://localhost:2011/docs · `/metrics` for Prometheus |
-| 🔎 Qdrant dashboard | http://localhost:2001/dashboard · gRPC on `2002` |
-| 🗄 DynamoDB-local | `localhost:2003` (no UI; table auto-created on first API call) |
+| 🖥 **Web** (Next.js) | http://localhost:2012 (Clerk sign-in) |
+| 📡 **API** (FastAPI) | http://localhost:2011/docs · `/health` · `/metrics` |
+| 🔎 Qdrant (catalog vectors) | http://localhost:2001/dashboard · gRPC `2002` · API key from `.env` |
+| 🗄 DynamoDB local (chats) | `localhost:2003` (no UI; AWS CLI / NoSQL Workbench, any credentials) |
 | 🧱 Redis (app cache) | `localhost:2004` (no password) |
-| 🧰 RedisInsight | http://localhost:2005 — **both `p2-redis` + `p2-langfuse-redis` pre-registered** on first boot |
-| 🕸 Jaeger (traces) | http://localhost:2006 · OTLP gRPC on `2007` |
-| 🎭 Langfuse (LLM traces) | http://localhost:2008 (login from `LANGFUSE_INIT_USER_*` in `.env`) |
-| 📈 Prometheus | http://localhost:2009 · Status → Targets |
-| 📊 Grafana | http://localhost:2010 (`admin/admin`) — **Prometheus DS + P2 overview dashboard pre-provisioned** |
-| 🐘 Langfuse Postgres | `localhost:2013` · db=`langfuse` user=`langfuse` pw=`LANGFUSE_POSTGRES_PASSWORD` — for pgAdmin/DBeaver/psql |
-| 🗃 Langfuse ClickHouse | http://localhost:2014 (HTTP) · `localhost:2015` (native) |
-| 🧵 Langfuse Redis (queue) | `localhost:2016` · password=`LANGFUSE_REDIS_AUTH` |
-| 🪣 Langfuse MinIO | http://localhost:2018 (web console, `minio/LANGFUSE_MINIO_ROOT_PASSWORD`) · S3 API on `2017` |
+| 📊 Grafana | http://localhost:2010 (no login): Service health (home), API & LLM, Data stores, Containers, Overview |
+| 📈 Prometheus | http://localhost:2009/targets · `/alerts` (11 rules) |
+| 🕸 Jaeger | http://localhost:2006 · OTLP gRPC `2007` |
+| 🎭 Langfuse | http://localhost:2019 (signs you in) → UI on `2008` |
+| 🧰 RedisInsight | http://localhost:2005 (both Redis DBs pre-registered) |
+| 📦 cAdvisor | http://localhost:2020 |
+| 🐘 Postgres (Langfuse) | `localhost:2013` (pgAdmin; logins via `make service_ls`) |
+| 🗃 ClickHouse (Langfuse) | http://localhost:2014/play · native `2015` |
+| 🧵 Redis (Langfuse queue) | `localhost:2016` (password in `.env`) |
+| 🪣 MinIO (Langfuse blobs) | http://localhost:2018 console · S3 API `2017` |
+| ☸️ **kind** | http://app.localhost · https://app.localhost (local CA) · `kubectl --context kind-p2 -n p2 get pods` |
 
-> Everything past row 5 is **wired for you on first boot**: a `redisinsight-init` sidecar POSTs both
-> Redis DBs into RedisInsight via its API (idempotent — skips if the persisted volume already has
-> DBs), and Grafana's Prometheus datasource + `P2 Recommender — Overview` dashboard are provisioned
-> from `ops/observability/grafana/{datasources.yml,dashboards.yml,json/}`.
+P2 itself keeps no data in Postgres (chats → DynamoDB, catalog → Qdrant, caches → Redis): the
+only Postgres is Langfuse's. The LLMs are hosted (Groq → OpenAI → Anthropic); the only models on
+local CPU are fastembed's BM25 (hybrid search) and an optional cross-encoder reranker.
 
-### 4-alt · Native dev — **fast loop**
+### Native dev (fast loop)
 ```bash
-make db                                   # Qdrant + DynamoDB-local + Redis
+make db                                   # Qdrant + DynamoDB local + Redis
+make seed                                 # index the catalog (once)
 make serve                                # API on the host (port 2011, --reload)
-
-cd apps/web && npm install && npm run dev # web on :3000  (Next.js dev)
-# NOTE: if your absolute path contains characters like "&", npm's .cmd shims break on Windows —
-# invoke via node directly:  node node_modules/next/dist/bin/next dev
+cd apps/web && npm install && npm run dev # web on :3000
+# The repo path contains "&", which breaks npm's .cmd shims on Windows:
+#   node node_modules/next/dist/bin/next dev
 ```
-
-### 5 · Smoke test
-```bash
-curl localhost:2011/health
-
-# mint a local dev token (works because CLERK_JWKS_URL is unset → HS256 dev mode)
-TOKEN=$(uv run python -c "from core.auth import mint_dev_token; print(mint_dev_token('me'))")
-
-curl -X POST localhost:2011/recommend -H "Authorization: Bearer $TOKEN" \
-  -H "content-type: application/json" -d '{"query":"good bass earphones","k":3}'
-
-curl -N -X POST localhost:2011/chat -H "Authorization: Bearer $TOKEN" \
-  -H "content-type: application/json" -d '{"query":"good bass earphones","session_id":"s1","k":3}'
-```
-> In the browser open **http://localhost:2012** → sign in (Clerk, or dev mode) → ask a question →
-> watch the **cards appear first**, then the explanation **stream in**.
 
 ---
 
 ## 🧰 Make Commands
 
-Everything is driven by the `Makefile`. The containerised stack is **three compose files under one
-Docker project** (`p2-recommender`) — `data`, `app`, `observability` — so the tiers share one
-network and can be started independently. (`make langfuse` is a fourth *tier* but not a fourth
-file: Langfuse's services live inside `docker-compose.observability.yml`.) All targets read host ports + secrets from `.env` (`--env-file .env`).
+`make help` prints all of them, grouped by the Makefile's sections. The compose stack is three
+files under one Docker project (`p2-recommender`); tiers are picked by service name.
 
-### Stack lifecycle (Docker)
+### Lifecycle
 
 | Command | What it does |
 |---|---|
-| `make db` | **Tier 1 — data stores.** Qdrant + DynamoDB-local + Redis (nothing else needed to develop against). |
-| `make app` | **Tier 2 — the app.** Builds + starts API + web on top of the data tier (`data + app`). |
-| `make obs` | **Tier 3 — observability.** Jaeger + Prometheus + Grafana + RedisInsight (+ preseed sidecar) + Langfuse (11 svc, incl. one-shot `redisinsight-init`). |
-| `make langfuse` | **Langfuse only** (web/worker/postgres/clickhouse/redis/minio) — for isolated LLM-trace debugging. |
-| `make full` / `make up` | **Everything** — data + app + observability + Langfuse (**16 services**, incl. one-shot `redisinsight-init`), built + started + `wait-api` + URL banner. |
-| `make upv` | **FROM ZERO** — wipe volumes → build → start all tiers → **seed catalog**. The cold-boot button (~5–8 min). |
-| `make bootstrap` | App tier up + catalog indexed + URLs printed (no observability). |
-| `make wait-api` | Poll `/health` up to 60 s. Called automatically by `full`/`upv`/`bootstrap` after boot. |
-| `make ps` | Status of every container in the stack. |
-| `make logs` | Tail logs for the whole stack (Ctrl-C to stop). |
-| `make urls` | Print the formatted service-directory (URLs + logins + ports — same block that renders after `make up`). |
+| `make up` | Compose stack (build + start) → wait for the API → **kind-start** → URL directory. `KIND=0`: compose only. |
+| `make upv` | **From zero:** `downv` → build → data tier → `seed` → everything → kind → URLs (~15 min cold). |
+| `make down` | Stop compose and the kind nodes. All data and the cluster are kept. |
+| `make downv` | ⚠️ Stop, **delete every volume and the kind cluster**. |
+| `make full` | Compose only (data + app + observability), never kind. |
+| `make db` / `app` / `obs` / `langfuse` | One tier: data stores / api + web / observability / Langfuse alone. |
+| `make seed` | Build the catalog JSON and index it into Qdrant (needs `OPENAI_API_KEY`). |
+| `make ps` · `make logs S=api` | Containers + kind nodes · follow logs (one service with `S=`). |
 
-### Shutdown & erase
+### Directory and checks
 
 | Command | What it does |
 |---|---|
-| `make down` | Stop + remove containers. **Keeps** named volumes (your Qdrant index + history survive). |
-| `make downv` | Stop + remove containers **and wipe all named volumes** — ⚠️ **DESTRUCTIVE** (full erase). |
-| `make upv` | Complete reset **and** rebuild + reseed in one go (`downv` → build → start → seed). |
+| `make urls` | Every URL with an up/down mark. No credentials: safe to screen-share. |
+| `make service_ls` | Every component with its **local** logins. Provider API keys are never printed (set / missing only). |
+| `make verify` | Calls every component and prints PASS / WARN / FAIL (36 checks, read-only, a few seconds). `LIVE=1` adds one tiny call per LLM provider (~$0.0001). |
+| `make check` | The green gate: `lint` + `type` + `test`. |
+| `make env` · `make env-check` | Rewrite `.env` / `.env.example` from `ops/env/gen_env.py` (values kept) · fail if the example is stale. |
+| `make alerts-test` · `make helm-lint` | promtool rule tests (Docker) · lint + schema-check the chart for kind, DOKS, EKS. |
 
-> **Keep vs erase:** `down` is a normal stop you resume with `make app`/`make up` (data intact).
-> `downv` is the "delete everything and start clean" reset — you'll need `make seed` (or `make upv`)
-> to re-index the catalog afterwards.
+### Kubernetes (kind)
 
-### Data & quality
-
-| Command | What it does |
-|---|---|
-| `make seed` | Aggregate reviews → products, then embed + index into Qdrant (run after `make db`). |
-| `make test` | Run the pytest suite. |
-| `make lint` | Ruff lint + format check. |
-| `make type` | mypy (strict) on `packages` / `apps` / `tests`. |
-| `make check` | **The green gate** — `lint` + `type` + `test` together. |
-| `make eval-ranking` | Retrieval + ranking eval (NDCG@3 / MRR / Recall@3). |
-| `make eval-rag` | Answer-quality eval (custom LLM judge). |
-| `make eval-gate` | CI eval gate — blocks a merge on ranking regression vs baseline. |
-
-### Native dev (no Docker for the app)
+`up` runs **`kind-start`**: no cluster → create the **lean** one (no in-cluster Prometheus/Grafana;
+compose's monitoring covers compose) and deploy the current code; stopped → restart its nodes and
+wait for the app; running → smoke test. It refuses to start without `KIND_NEED_GB` (6) free in the
+Docker VM and names any other kind cluster that holds the memory. It never stops or deletes another
+project's cluster.
 
 | Command | What it does |
 |---|---|
-| `make install` | Sync the `uv` workspace (provisions Python 3.12 + deps). |
-| `make serve` | Run the API on the host with `--reload` (port 2011; needs `make db` first). |
-| `make build-backend` | Build the API Docker image (multi-stage, non-root). |
-| `make helm-lint` | Lint the Helm chart + validate rendered manifests (needs `helm` + `kubeconform`). |
+| `make kind-start` · `kind-stop` · `kind-status` | Start (create / restart) · stop the nodes, keep the cluster · nodes, pods, deployed vs current image. |
+| `make kind-redeploy` | Build both images at the working tree's tag, load them, `helm upgrade`, smoke test. |
+| `make kind-all` | The full Phase 6 cluster from zero, with kube-prometheus-stack. |
+| `make kind-addons-monitoring` | Add kube-prometheus-stack to a lean cluster (~1.3 GB), then `make kind-deploy`. |
+| `make kind-argocd` · `kind-gitops` | Hand the release to Argo CD · deploy through git. |
+| `make kind-smoke` | Smoke test through the Gateway (`AGGREGATE=1` spends one SerpApi search). |
 
-### Common workflows
-
-```bash
-# First run, everything, from nothing:
-make upv                 # wipe + build + start all 15 services + seed catalog
-make urls                # then open http://localhost:2012
-
-# Day-to-day (data intact between sessions):
-make app                 # start API + web (data tier auto-included)
-make down                # stop for the day — KEEPS your indexed data
-
-# Add dashboards when you want them:
-make obs                 # Jaeger / Prometheus / Grafana / Langfuse
-
-# Nuke and start clean:
-make downv               # ⚠️ erase all volumes
-make upv                 # rebuild + reseed from scratch
-
-# Before pushing code:
-make check               # lint + types + tests (the green gate)
-```
+Details: [docs/runbook-kind.md](docs/runbook-kind.md).
 
 ---
 
 ## 📋 Environment Variables
 
-Copy `.env.example` → `.env`. (Full annotated list is in `.env.example`; host ports default to a
-`2001–2018` scheme. `2013–2018` back the Langfuse infra — Postgres/ClickHouse/Redis/MinIO — and
-are published so pgAdmin/DBeaver/psql/MinIO-console/redis-cli work directly on the host.)
+`.env.example` is generated by `ops/env/gen_env.py` (`make env`): one boxed section per service,
+each holding everything that service needs: its port, URL, credentials and settings (Postgres
+user, password, database and port together, and so on). Values never carry trailing comments:
+python-dotenv reads `KEY=   # note` as the value `# note`. `make env` rewrites both files and keeps
+every value already in `.env` (backup in `.env.bak`).
 
-**Two keys matter, and which one depends on which backend you want:**
+**Two keys decide what works:**
 
 | Key | Needed for | If missing |
 |---|---|---|
-| `SERPAPI_API_KEY` | **[B] the live aggregator** — `/aggregate`, and therefore the whole web UI | The UI returns `source_unavailable`. **Free plan = 250 searches/month**, and every cache **miss** spends one. |
-| `OPENAI_API_KEY` | **[A] the catalog path** — embeddings for indexing + retrieval; also the LLM fallback rung | `/recommend` and `/chat` cannot embed. `/aggregate` still ranks, but writes no reasons unless a Groq/Anthropic key is set. |
+| `SERPAPI_API_KEY` | **[B] the live aggregator**: `/aggregate`, so the whole web UI | The UI returns `source_unavailable`. Free plan = 250 searches/month; every cache miss spends one. |
+| `OPENAI_API_KEY` | **[A] the catalog path**: embeddings for indexing + retrieval; LLM fallback rung | `/recommend` and `/chat` can't embed. `/aggregate` still ranks, but writes no reasons unless Groq or Anthropic is set. |
 
-`GROQ_API_KEY` (primary LLM, cheapest/fastest) and `ANTHROPIC_API_KEY` (last fallback rung) are
-optional and inert if empty.
-
-```env
-# ── Live shopping source (REQUIRED for /aggregate — metered!) ──
-SERPAPI_API_KEY=           # https://serpapi.com/manage-api-key
-SERPAPI_DAILY_BUDGET=40    # global spend guard; 0 disables the cap
-SERPAPI_MONTHLY_BUDGET=250 # free-plan ceiling
-
-# ── LLM providers (Groq primary; others optional fallback rungs) ──
-OPENAI_API_KEY=            # REQUIRED (embeddings + fallback LLM)
-GROQ_API_KEY=              # optional — primary LLM (cheapest/fastest); inert if empty
-ANTHROPIC_API_KEY=         # optional — last fallback rung; inert if empty
-EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_DIM=1536
-
-# ── Data tier (host ports; containers keep 6333/6379/8000 internally) ──
-QDRANT_URL=http://localhost:2001
-REDIS_URL=redis://localhost:2004/0
-DYNAMODB_ENDPOINT=http://localhost:2003
-DYNAMODB_TABLE=p2-recommender
-AWS_REGION=us-east-1
-
-# ── Auth (Clerk optional; dev HS256 otherwise) ──
-CLERK_JWKS_URL=            # set → verify Clerk RS256 tokens; empty → dev HS256
-AUTH_DEV_SECRET=dev-secret-change-me-in-prod-0123456789abcdef
-RATE_LIMIT_PER_MINUTE=30
-RATE_LIMIT_PER_DAY=500
-
-# ── Security + cost controls ──
-LLM_ENABLED=true           # kill switch: false → serve cards, skip LLM explanations
-MAX_OUTPUT_TOKENS=600
-
-# ── Observability (all optional; degrade gracefully if unset) ──
-OTEL_EXPORTER_OTLP_ENDPOINT=   # e.g. http://localhost:4317 (compose sets it in-network)
-LANGFUSE_PUBLIC_KEY=
-LANGFUSE_SECRET_KEY=
-LANGFUSE_HOST=
-
-# ── Langfuse internal infra (for pgAdmin / DBeaver / MinIO console) ──
-LANGFUSE_POSTGRES_USER=langfuse            # pgAdmin login
-LANGFUSE_POSTGRES_DB=langfuse              # pgAdmin database
-LANGFUSE_POSTGRES_PASSWORD=langfuse-local-dev
-LANGFUSE_POSTGRES_PORT=2013                # host → container 5432
-LANGFUSE_CLICKHOUSE_HTTP_PORT=2014         # host → container 8123
-LANGFUSE_CLICKHOUSE_NATIVE_PORT=2015       # host → container 9000
-LANGFUSE_REDIS_PORT=2016                   # host → container 6379
-LANGFUSE_REDIS_AUTH=langfuse-local-dev
-LANGFUSE_MINIO_API_PORT=2017               # host → container 9000 (S3)
-LANGFUSE_MINIO_CONSOLE_PORT=2018           # host → container 9001 (web console)
-LANGFUSE_MINIO_ROOT_PASSWORD=langfuse-local-dev
-
-# ── App / ports ──
-APP_ENV=local
-API_PORT=2011
-WEB_PORT=2012
-```
+`GROQ_API_KEY` (primary, cheapest) and `ANTHROPIC_API_KEY` (last rung) are optional. A key that is
+set but dead (expired, out of credit) is not silent: `make verify LIVE=1` says which, and the
+`LLMProviderFailing` alert fires while the chain falls back.
 
 ---
 

@@ -20,24 +20,46 @@ Pinned versions live in `infra/kind/addons/versions.env`.
 
 ## Prerequisites
 
-- Docker Desktop with **8 GB** for its VM. The compose stack and kind don't fit together: `make down` first.
+- Docker Desktop with a **12 GB** VM: the compose stack and the lean cluster run together (see Memory).
 - kind 0.32, kubectl 1.36, **Helm 4** (4.1.4), uv, k6 (drills only).
 - A filled-in `.env` (OpenAI, Clerk; SerpApi optional). Only an allow-list of keys reaches the
   cluster (`infra/kind/kind_secret.py`); values are never printed.
 
 Windows notes:
-- GNU make run from PowerShell executes recipes in **cmd.exe**. The kind targets are written to
-  work there. Older targets (`wait-api`, `urls`, `upv`) need Git Bash.
+- GNU make run from PowerShell executes recipes in **cmd.exe**; from Git Bash, in sh. Every
+  recipe is shell-neutral (logic lives in `ops/stack/` and `infra/kind/`), so both work.
 - Python, .NET and k6 don't resolve `*.localhost`; curl.exe and browsers do. Scripts connect to
   `127.0.0.1` and send `Host: app.localhost`.
 - curl.exe (Schannel) with the local CA: `curl.exe --cacert p2-local-ca.crt --ssl-revoke-best-effort https://app.localhost/`.
 
-## From zero
+## With the rest of the stack: `make up`
+
+`make up` / `make upv` bring up the compose stack, then run `make kind-start`:
+
+| Cluster state | kind-start does |
+|---|---|
+| absent | creates the **lean** cluster: `kind-up kind-addons-core kind-images kind-secret kind-deploy kind-smoke` (no kube-prometheus-stack, chart monitoring off) |
+| stopped | starts its nodes, re-exports the kubeconfig, waits for the API server, nodes, gateway and pods, smoke test |
+| running | says whether the deployed image is your current code, smoke test |
+
+It skips (and says why) when the Docker VM has less than `KIND_NEED_GB` (5) available, naming any
+other kind cluster that holds the memory; it never stops or deletes another project's cluster.
+`make down` stops the nodes (cluster kept), `make downv` deletes the cluster, `KIND=0` leaves
+Kubernetes alone. kind never rebuilds on its own: `make kind-redeploy` ships the working tree.
+
+Measured on 2026-10-07 (12 GB VM): `make up` with the compose stack already running created the
+lean cluster from zero in 508 s total, smoke 4/4; `make kind-stop` then `make kind-start` brought it
+back in 71 s, smoke 4/4.
+
+## The full Phase 6 cluster, from zero
 
 ```bash
-make kind-all      # cluster → add-ons → images → Secret → Helm install → smoke test
+make kind-all      # cluster → all add-ons (incl. monitoring) → images → Secret → Helm install → smoke
 make kind-argocd   # Argo CD + git server; hands the release from Helm to GitOps (no downtime)
 ```
+
+A lean cluster can be upgraded in place: `make kind-addons-monitoring kind-deploy` (the chart
+turns its ServiceMonitor, rules and dashboard on when the Prometheus Operator CRDs exist).
 
 `kind-all` is `kind-up kind-addons kind-images kind-secret kind-deploy kind-smoke`. Each step
 re-runs safely on its own. Measured on 2026-10-07 from no cluster (app images already built):
@@ -107,8 +129,10 @@ re-applying `ops/argocd/kind/root.yaml` restores it, and self-heal puts git's st
 Still open: after a node failure the evicted pods stay on the surviving node (needs a descheduler
 or a restart); in-cluster traffic is plain HTTP; rate limits fail open while Redis is down.
 
-## Memory (8 GB Docker VM)
+## Memory (12 GB Docker VM)
 
 Empty cluster ~1.3 GB · + metrics-server, Envoy Gateway, cert-manager ~0.9 GB · + app ~2 GB ·
-+ kube-prometheus-stack ~1.3 GB · + Argo CD ~0.5 GB ≈ 6 GB in all. Every kind node reports the
++ kube-prometheus-stack ~1.3 GB · + Argo CD ~0.5 GB ≈ 6 GB in all. Measured together on
+2026-10-07 (`docker stats`): compose stack 2.4 GB + lean cluster 3.5 GB (+ another project's
+4-node cluster 3.2 GB), with 4.2 GB still available and ~1.3 GB in swap. Every kind node reports the
 whole VM as allocatable, so requests don't protect you here: the api HPA is capped at 4.

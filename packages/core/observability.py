@@ -15,6 +15,7 @@ from typing import Any
 from opentelemetry import trace
 
 from core.config import Settings, get_settings
+from core.llm_metrics import LLM_METRICS_CALLBACK
 
 logger = logging.getLogger("p2.observability")
 
@@ -72,25 +73,26 @@ def instrument_fastapi(app: Any) -> None:
 
 
 def get_langchain_callbacks(settings: Settings | None = None) -> list[Any]:
-    """Langfuse callback handler(s) if keys are configured, else an empty list."""
+    """LLM callbacks: Prometheus metrics always, plus Langfuse tracing when its keys are set."""
     settings = settings or get_settings()
+    callbacks: list[Any] = [LLM_METRICS_CALLBACK]
     if not (settings.langfuse_public_key and settings.langfuse_secret_key):
-        logger.info("Langfuse keys not set; LLM tracing disabled")
-        return []
+        logger.info("Langfuse keys not set; LLM tracing disabled (metrics still recorded)")
+        return callbacks
     try:
         from langfuse.callback import CallbackHandler
 
-        return [
+        callbacks.append(
             CallbackHandler(
                 public_key=settings.langfuse_public_key,
                 secret_key=settings.langfuse_secret_key,
                 host=settings.langfuse_host or "https://cloud.langfuse.com",
             )
-        ]
+        )
     except Exception:
         # Never break a request over telemetry — but make the failure LOUD, not silent.
         logger.warning("Langfuse callback unavailable; LLM cost/token tracing OFF", exc_info=True)
-        return []
+    return callbacks
 
 
 def configure_observability(app: Any) -> None:

@@ -1,13 +1,26 @@
-# Grafana dashboard provider: load every dashboard JSON from the mounted folder.
+# Grafana dashboard providers. Both land in the "P2" folder.
+#   shared:  ops/helm/p2-recommender/files/dashboards  - app metrics; Kubernetes loads them too
+#   compose: ops/observability/grafana/dashboards       - data stores, containers, probes
+#            (their exporters exist only in compose)
 apiVersion: 1
 
 providers:
-  - name: p2
+  - name: p2-shared
     orgId: 1
-    folder: P2 Recommender
+    folder: P2
     type: file
-    disableDeletion: false
+    disableDeletion: true
+    allowUiUpdates: false
     updateIntervalSeconds: 30
-    allowUiUpdates: true
     options:
-      path: /etc/grafana/provisioning/dashboards/json
+      path: /etc/grafana/provisioning/dashboards/shared
+
+  - name: p2-compose
+    orgId: 1
+    folder: P2
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards/compose

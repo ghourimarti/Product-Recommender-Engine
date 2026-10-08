@@ -1,44 +1,24 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# OBSERVABILITY  (standalone tier — can run without app or data)
-#
-# Core (lightweight, instant start):
-#   • Jaeger        — distributed traces (OTLP receiver on 4317)
-#   • Prometheus    — scrapes the API's /metrics endpoint
-#   • Grafana       — dashboards over Prometheus (empty; log in admin/admin)
-#   • RedisInsight  — GUI for Redis
-#
-# LLM observability — Langfuse self-host (heavier; cold start ~1–3 min):
-#   • langfuse-web / -worker / -postgres / -clickhouse / -redis / -minio
-#     Langfuse is part of THIS tier (it is observability), so `make obs` brings
-#     it up alongside the core services. It runs its OWN postgres/clickhouse/
-#     redis/minio so it never fights with the app-tier stores.
-#
-# To boot ONLY the Langfuse subset in isolation (debugging), start just those
-# services by name: `make langfuse` (it targets the langfuse-* services).
-#
-# First-boot side effects (via LANGFUSE_INIT_*):
-#   • Creates org "p2-recommender" + project "local" + admin user (email/pass
-#     from .env).
-#   • Registers the LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY already in your
-#     .env AS the local project's keys — so your API code keeps working
-#     unchanged, just pointed at http://localhost:2008 instead of cloud.
-#
-# Same `name:` as the other tiers → shared project network. Prometheus and
-# RedisInsight expect to find `api` and `redis` containers by name; if you run
-# obs alone, their scrape targets are simply down until you `make app`/`make db`.
-# ─────────────────────────────────────────────────────────────────────────────
+# TIER 3 - OBSERVABILITY. Nothing here needs a login or a manual step:
+#   Jaeger         request traces (OTLP in on 4317)
+#   Prometheus     scrapes the api, every data store, every exporter and a health probe
+#                  of every service; loads the alert rules shared with Kubernetes
+#   Grafana        anonymous access; Prometheus + Jaeger datasources and the P2 dashboards
+#                  are provisioned
+#   Langfuse       LLM traces; org, project, user and API keys bootstrapped from .env, plus
+#                  langfuse-autologin (:2019) which opens the UI already signed in
+#   RedisInsight   both Redis databases pre-registered from env (no init sidecar)
+#   exporters      redis (x2), postgres, blackbox (health probes), cAdvisor (containers)
+# Host ports are bound to 127.0.0.1 only.
 
 name: p2-recommender
 
-# Shared Langfuse env (web + worker). Kept here (not a separate file) so the
-# whole observability tier lives in ONE compose file.
+x-langfuse-project-id: &langfuse_project_id p2-recommender-project
+
 x-langfuse-shared: &langfuse-shared
-  # user + db name wired to the same LANGFUSE_POSTGRES_* env-vars as the postgres
-  # service below, so renaming the DB user/name in .env keeps the app connected.
   DATABASE_URL: postgresql://${LANGFUSE_POSTGRES_USER:-langfuse}:${LANGFUSE_POSTGRES_PASSWORD:-langfuse-local-dev}@langfuse-postgres:5432/${LANGFUSE_POSTGRES_DB:-langfuse}
   CLICKHOUSE_URL: http://langfuse-clickhouse:8123
   CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
-  CLICKHOUSE_USER: langfuse
+  CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER:-langfuse}
   CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-langfuse-local-dev}
   CLICKHOUSE_CLUSTER_ENABLED: "false"
   REDIS_HOST: langfuse-redis
@@ -47,7 +27,7 @@ x-langfuse-shared: &langfuse-shared
   LANGFUSE_S3_EVENT_UPLOAD_ENABLED: "true"
   LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
   LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
-  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_MINIO_ROOT_USER:-minio}
   LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD:-langfuse-local-dev}
   LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
   LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
@@ -55,153 +35,161 @@ x-langfuse-shared: &langfuse-shared
   LANGFUSE_S3_MEDIA_UPLOAD_ENABLED: "true"
   LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
   LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
-  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_MINIO_ROOT_USER:-minio}
   LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD:-langfuse-local-dev}
   LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
   LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
   LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
   SALT: ${LANGFUSE_SALT:-langfuse-local-dev-salt}
   ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
-  TELEMETRY_ENABLED: "true"
+  TELEMETRY_ENABLED: "false"
   LANGFUSE_LOG_LEVEL: info
 
 services:
+  # ---- traces, metrics, dashboards ------------------------------------------------------
   jaeger:
     image: jaegertracing/all-in-one:1.62.0
     container_name: p2-jaeger
     environment:
-      - COLLECTOR_OTLP_ENABLED=true
+      COLLECTOR_OTLP_ENABLED: "true"
     ports:
-      - "${JAEGER_UI_PORT:-2006}:16686"      # Jaeger UI
-      - "${OTEL_OTLP_GRPC_PORT:-2007}:4317"  # OTLP gRPC receiver
+      - "127.0.0.1:${JAEGER_UI_PORT:-2006}:16686"
+      - "127.0.0.1:${OTEL_OTLP_GRPC_PORT:-2007}:4317"
 
   prometheus:
     image: prom/prometheus:v2.55.0
     container_name: p2-prometheus
+    # Writes the Qdrant API key to a file first: Prometheus reads credentials from files, not env.
+    entrypoint: ["/bin/sh", "-c"]
     command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.retention.time=15d
+      - >-
+        printf '%s' "$${QDRANT_API_KEY}" > /tmp/qdrant_api_key &&
+        exec /bin/prometheus --config.file=/etc/prometheus/prometheus.yml
+        --storage.tsdb.retention.time=15d --web.enable-lifecycle
+    environment:
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      # Alert rules were a DEAD FILE before: prometheus.yml had no `rule_files` and the file was
-      # never mounted, so no alert could ever fire. Both are fixed now. The file lives in the Helm
-      # chart, so compose and Kubernetes load the same rules.
       - ../../ops/helm/p2-recommender/files/alerts.yaml:/etc/prometheus/alerts.yaml:ro
       - prometheus_data:/prometheus
     ports:
-      - "${PROMETHEUS_PORT:-2009}:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-2009}:9090"
 
   grafana:
     image: grafana/grafana:11.3.0
     container_name: p2-grafana
     environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-      - GF_USERS_ALLOW_SIGN_UP=false
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: ${GRAFANA_ANONYMOUS_ROLE:-Admin}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/compose/p2-health.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
     volumes:
       - grafana_data:/var/lib/grafana
-      # Grafana used to boot EMPTY — no datasource, no dashboards — so it could not query
-      # anything and was pointless to open. Provisioned as code so it survives volume wipes.
       - ../../ops/observability/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - ../../ops/observability/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
-      # Dashboards live in the Helm chart too (Kubernetes loads them through the Grafana sidecar).
-      - ../../ops/helm/p2-recommender/files/dashboards:/etc/grafana/provisioning/dashboards/json:ro
+      # App dashboards are shared with Kubernetes (the chart loads them through Grafana's sidecar).
+      - ../../ops/helm/p2-recommender/files/dashboards:/etc/grafana/provisioning/dashboards/shared:ro
+      - ../../ops/observability/grafana/dashboards:/etc/grafana/provisioning/dashboards/compose:ro
     ports:
-      - "${GRAFANA_PORT:-2010}:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-2010}:3000"
     depends_on:
       - prometheus
 
-  redisinsight:
-    image: redis/redisinsight:latest
-    container_name: p2-redisinsight
-    # RIACCEPTEULA skips the "accept terms" splash on first UI visit; harmless if
-    # unrecognised by future image versions.
+  # ---- exporters (in-network only) ------------------------------------------------------
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.93.0
+    container_name: p2-redis-exporter
     environment:
-      RIACCEPTEULA: "true"
+      REDIS_ADDR: redis://redis:6379
+
+  langfuse-redis-exporter:
+    image: oliver006/redis_exporter:v1.93.0
+    container_name: p2-langfuse-redis-exporter
+    environment:
+      REDIS_ADDR: redis://langfuse-redis:6379
+      REDIS_PASSWORD: ${LANGFUSE_REDIS_AUTH:-langfuse-local-dev}
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    container_name: p2-postgres-exporter
+    environment:
+      DATA_SOURCE_URI: langfuse-postgres:5432/${LANGFUSE_POSTGRES_DB:-langfuse}?sslmode=disable
+      DATA_SOURCE_USER: ${LANGFUSE_POSTGRES_USER:-langfuse}
+      DATA_SOURCE_PASS: ${LANGFUSE_POSTGRES_PASSWORD:-langfuse-local-dev}
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.28.0
+    container_name: p2-blackbox-exporter
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ../../ops/observability/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.6
+    container_name: p2-cadvisor
+    privileged: true
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=15s
+      - --store_container_labels=false
+      - --whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service
+      - --disable_metrics=percpu,sched,tcp,udp,disk,diskIO,hugetlb,referenced_memory,cpu_topology,resctrl,advtcp,process,cpuset,memory_numa
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "127.0.0.1:${CADVISOR_PORT:-2020}:8080"
+
+  # ---- Redis GUI ------------------------------------------------------------------------
+  redisinsight:
+    image: redis/redisinsight:3.4.2
+    container_name: p2-redisinsight
+    environment:
       RI_ACCEPT_TERMS_AND_CONDITIONS: "true"
+      RI_REDIS_HOST: redis
+      RI_REDIS_PORT: "6379"
+      RI_REDIS_ALIAS: p2-redis (app cache)
+      RI_REDIS_HOST1: langfuse-redis
+      RI_REDIS_PORT1: "6379"
+      RI_REDIS_ALIAS1: p2-langfuse-redis (Langfuse queue)
+      RI_REDIS_PASSWORD1: ${LANGFUSE_REDIS_AUTH:-langfuse-local-dev}
     volumes:
       - redisinsight_data:/data
     ports:
-      - "${REDISINSIGHT_PORT:-2005}:5540"
+      - "127.0.0.1:${REDISINSIGHT_PORT:-2005}:5540"
 
-  redisinsight-init:
-    # One-shot sidecar: pre-registers both Redis DBs (p2-redis app cache +
-    # p2-langfuse-redis queue) inside RedisInsight so you don't add them by hand
-    # after every fresh volume. Idempotent: if RedisInsight already knows about
-    # any databases (previous boot, or you added some manually), this exits
-    # without changing anything.
-    image: curlimages/curl:8.10.1
-    container_name: p2-redisinsight-init
-    depends_on:
-      redisinsight:
-        condition: service_started
-    environment:
-      LANGFUSE_REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:-langfuse-local-dev}
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        set -eu
-        # Poll until RedisInsight's HTTP API is up (max ~60s).
-        for i in $$(seq 1 30); do
-          code=$$(curl -sfo /dev/null -w "%{http_code}" http://redisinsight:5540/api/databases || echo 000)
-          if [ "$$code" = "200" ]; then break; fi
-          sleep 2
-        done
-        # Idempotency: skip if any DBs already present (persisted in redisinsight_data volume).
-        existing=$$(curl -sf http://redisinsight:5540/api/databases 2>/dev/null || printf '[]')
-        if [ "$$existing" != "[]" ] && [ "$$(printf '%s' "$$existing" | wc -c)" -gt 3 ]; then
-          echo "redisinsight-init: databases already registered - skipping"
-          exit 0
-        fi
-        # Register p2-redis (app cache, no auth).
-        if curl -sfX POST http://redisinsight:5540/api/databases \
-             -H 'Content-Type: application/json' \
-             -d '{"name":"p2-redis (app cache)","host":"redis","port":6379,"db":0,"tls":false}' >/dev/null; then
-          echo "redisinsight-init: registered p2-redis"
-        else
-          echo "redisinsight-init: p2-redis registration failed (RI may still be booting)"
-        fi
-        # Register p2-langfuse-redis (password-protected).
-        if curl -sfX POST http://redisinsight:5540/api/databases \
-             -H 'Content-Type: application/json' \
-             -d "{\"name\":\"p2-langfuse-redis\",\"host\":\"langfuse-redis\",\"port\":6379,\"password\":\"$${LANGFUSE_REDIS_AUTH}\",\"tls\":false}" >/dev/null; then
-          echo "redisinsight-init: registered p2-langfuse-redis"
-        else
-          echo "redisinsight-init: p2-langfuse-redis registration failed"
-        fi
-        echo "redisinsight-init: done"
-    restart: "no"
-
-  # ── Langfuse — self-hosted LLM observability (6 services) ──────────────────
+  # ---- Langfuse: LLM traces (web, worker + its own postgres, clickhouse, redis, minio) ---
   langfuse-web:
     image: langfuse/langfuse:3
     container_name: p2-langfuse-web
     restart: unless-stopped
-    depends_on:
-      langfuse-postgres:
-        condition: service_healthy
-      langfuse-clickhouse:
-        condition: service_healthy
-      langfuse-redis:
-        condition: service_healthy
-      langfuse-minio:
-        condition: service_healthy
+    depends_on: &langfuse_deps
+      langfuse-postgres: {condition: service_healthy}
+      langfuse-clickhouse: {condition: service_healthy}
+      langfuse-redis: {condition: service_healthy}
+      langfuse-minio: {condition: service_healthy}
     ports:
-      - "${LANGFUSE_UI_PORT:-2008}:3000"
+      - "127.0.0.1:${LANGFUSE_UI_PORT:-2008}:3000"
     environment:
       <<: *langfuse-shared
       NEXTAUTH_URL: http://localhost:${LANGFUSE_UI_PORT:-2008}
       NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-langfuse-local-dev-nextauth-secret}
-      # ── First-boot bootstrap. On a fresh volume, Langfuse creates the org,
-      #    project, admin user AND registers the pk/sk below as valid API keys.
-      #    After boot they're immutable via env — change them in the UI instead.
+      # Bootstrapped on the FIRST boot of an empty volume; `make downv` to re-apply changes.
       LANGFUSE_INIT_ORG_ID: p2-recommender-org
       LANGFUSE_INIT_ORG_NAME: p2-recommender
-      LANGFUSE_INIT_PROJECT_ID: p2-recommender-project
+      LANGFUSE_INIT_PROJECT_ID: *langfuse_project_id
       LANGFUSE_INIT_PROJECT_NAME: local
       LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
       LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
-      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-admin@localhost}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-admin@example.com}
       LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-Admin}
       LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-changeme}
 
@@ -209,39 +197,40 @@ services:
     image: langfuse/langfuse-worker:3
     container_name: p2-langfuse-worker
     restart: unless-stopped
-    depends_on:
-      langfuse-postgres:
-        condition: service_healthy
-      langfuse-clickhouse:
-        condition: service_healthy
-      langfuse-redis:
-        condition: service_healthy
-      langfuse-minio:
-        condition: service_healthy
+    depends_on: *langfuse_deps
     environment:
       <<: *langfuse-shared
+
+  langfuse-autologin:
+    image: python:3.12.15-alpine
+    container_name: p2-langfuse-autologin
+    restart: unless-stopped
+    command: ["python", "/app/langfuse_autologin.py"]
+    environment:
+      LANGFUSE_PUBLIC_URL: http://localhost:${LANGFUSE_UI_PORT:-2008}
+      LANGFUSE_INIT_PROJECT_ID: *langfuse_project_id
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-admin@example.com}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-changeme}
+    volumes:
+      - ../../ops/observability/langfuse_autologin.py:/app/langfuse_autologin.py:ro
+    ports:
+      - "127.0.0.1:${LANGFUSE_AUTOLOGIN_PORT:-2019}:8080"
+    depends_on:
+      - langfuse-web
 
   langfuse-postgres:
     image: postgres:15-alpine
     container_name: p2-langfuse-postgres
     restart: unless-stopped
     environment:
-      # User + DB name env-driven so pgAdmin/DBeaver logins are discoverable in
-      # .env and remappable. The x-langfuse-shared DATABASE_URL above uses the
-      # same three vars, so the app stays in sync automatically.
       POSTGRES_USER: ${LANGFUSE_POSTGRES_USER:-langfuse}
       POSTGRES_PASSWORD: ${LANGFUSE_POSTGRES_PASSWORD:-langfuse-local-dev}
       POSTGRES_DB: ${LANGFUSE_POSTGRES_DB:-langfuse}
-    # Published to host so psql/DBeaver work directly. Langfuse UI/worker still
-    # reach this by container name (langfuse-postgres:5432) — the internal wiring
-    # is unaffected. Change LANGFUSE_POSTGRES_PORT in .env if 2013 collides.
     ports:
-      - "${LANGFUSE_POSTGRES_PORT:-2013}:5432"
+      - "127.0.0.1:${LANGFUSE_POSTGRES_PORT:-2013}:5432"
     volumes:
       - langfuse_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      # Uses the container's own POSTGRES_USER/POSTGRES_DB env vars so it stays
-      # correct if you rename them in .env.
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
@@ -253,20 +242,17 @@ services:
     restart: unless-stopped
     environment:
       CLICKHOUSE_DB: default
-      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER:-langfuse}
       CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-langfuse-local-dev}
-    # 8123 = HTTP query interface; 9000 = native TCP protocol. Both published so
-    # you can hit http://localhost:${LANGFUSE_CLICKHOUSE_HTTP_PORT}/play or connect
-    # a native client. Langfuse itself uses the container-internal ports.
     ports:
-      - "${LANGFUSE_CLICKHOUSE_HTTP_PORT:-2014}:8123"
-      - "${LANGFUSE_CLICKHOUSE_NATIVE_PORT:-2015}:9000"
+      - "127.0.0.1:${LANGFUSE_CLICKHOUSE_HTTP_PORT:-2014}:8123"
+      - "127.0.0.1:${LANGFUSE_CLICKHOUSE_NATIVE_PORT:-2015}:9000"
     volumes:
       - langfuse_clickhouse_data:/var/lib/clickhouse
       - langfuse_clickhouse_logs:/var/log/clickhouse-server
+      - ../../ops/observability/clickhouse-prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
     healthcheck:
-      # NOTE: use 127.0.0.1, not localhost. Alpine's BusyBox resolver returns ::1
-      # first for `localhost`, but ClickHouse only binds IPv4 → connection refused.
+      # 127.0.0.1, not localhost: BusyBox resolves localhost to ::1 first, ClickHouse is IPv4.
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping || exit 1"]
       interval: 10s
       timeout: 5s
@@ -277,44 +263,40 @@ services:
     image: redis:7-alpine
     container_name: p2-langfuse-redis
     restart: unless-stopped
-    command: >
-      redis-server
-      --requirepass ${LANGFUSE_REDIS_AUTH:-langfuse-local-dev}
-    # Published so RedisInsight (or redis-cli) can hit it directly on host.
-    # Auth password = LANGFUSE_REDIS_AUTH in .env.
+    command: ["redis-server", "--requirepass", "${LANGFUSE_REDIS_AUTH:-langfuse-local-dev}"]
+    environment:
+      LANGFUSE_REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:-langfuse-local-dev}
     ports:
-      - "${LANGFUSE_REDIS_PORT:-2016}:6379"
+      - "127.0.0.1:${LANGFUSE_REDIS_PORT:-2016}:6379"
     volumes:
       - langfuse_redis_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a $${LANGFUSE_REDIS_AUTH:-langfuse-local-dev} ping | grep PONG"]
+      test: ["CMD-SHELL", "redis-cli -a $${LANGFUSE_REDIS_AUTH} --no-auth-warning ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 10
-    environment:
-      LANGFUSE_REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:-langfuse-local-dev}
 
   langfuse-minio:
-    # Pre-creates the "langfuse" bucket via mkdir before starting the server,
-    # so Langfuse doesn't 404 on the first S3 write. Same trick the official
-    # Langfuse compose uses. S3 API + web console both published to host.
-    image: minio/minio:latest
+    # minio/minio left Docker Hub (and quay.io) in 2025, so a fresh clone could not pull it.
+    # Chainguard's build is what Langfuse's own compose uses; it only publishes :latest, hence
+    # the digest. Root, because existing volumes were written by the old root-run image.
+    image: cgr.dev/chainguard/minio@sha256:e7ca559d9f7c0b5f24f5f669bb92f40f3ca88d56273b808bf3a7c116c17d2ffa
     container_name: p2-langfuse-minio
     restart: unless-stopped
-    entrypoint: >
-      sh -c 'mkdir -p /data/langfuse &&
-             exec minio server /data --console-address ":9001"'
+    user: "0:0"
+    # Pre-creates the bucket so Langfuse's first upload doesn't 404.
+    entrypoint: ["sh", "-c", "mkdir -p /data/langfuse && exec minio server /data --address :9000 --console-address :9001"]
     environment:
-      MINIO_ROOT_USER: minio
+      MINIO_ROOT_USER: ${LANGFUSE_MINIO_ROOT_USER:-minio}
       MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_ROOT_PASSWORD:-langfuse-local-dev}
-    # 9000 = S3 API; 9001 = web console (login = minio / LANGFUSE_MINIO_ROOT_PASSWORD).
+      MINIO_PROMETHEUS_AUTH_TYPE: public
     ports:
-      - "${LANGFUSE_MINIO_API_PORT:-2017}:9000"
-      - "${LANGFUSE_MINIO_CONSOLE_PORT:-2018}:9001"
+      - "127.0.0.1:${LANGFUSE_MINIO_API_PORT:-2017}:9000"
+      - "127.0.0.1:${LANGFUSE_MINIO_CONSOLE_PORT:-2018}:9001"
     volumes:
       - langfuse_minio_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "mc ready local || (curl -sf http://localhost:9000/minio/health/live)"]
+      test: ["CMD", "mc", "ready", "local"]
       interval: 10s
       timeout: 5s
       retries: 10

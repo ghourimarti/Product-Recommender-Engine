@@ -37,7 +37,7 @@ def test_compose_mounts_the_shared_files() -> None:
 
 def test_alert_rules_are_complete_and_api_down_survives_scale_to_zero() -> None:
     alerts = _alerts()
-    assert len(alerts) == 10
+    assert len(alerts) == 11
     assert alerts["ApiDown"]["expr"] == 'absent(up{job="p2-api"} == 1)'
     for name, rule in alerts.items():
         assert rule["labels"]["severity"] in {"warning", "critical"}, name

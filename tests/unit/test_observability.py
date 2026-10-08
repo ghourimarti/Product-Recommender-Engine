@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from core.config import Settings
+from core.llm_metrics import LLM_METRICS_CALLBACK
 from core.observability import get_langchain_callbacks, setup_telemetry, tracer
 
 
-def test_no_langfuse_keys_means_no_callbacks() -> None:
+def test_no_langfuse_keys_means_metrics_only() -> None:
+    # Langfuse tracing is off without keys; the Prometheus LLM metrics are always recorded.
     settings = Settings(langfuse_public_key="", langfuse_secret_key="")
-    assert get_langchain_callbacks(settings) == []
+    assert get_langchain_callbacks(settings) == [LLM_METRICS_CALLBACK]
 
 
 def test_setup_telemetry_without_endpoint_is_noop() -> None:
