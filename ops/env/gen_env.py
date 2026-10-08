@@ -176,8 +176,16 @@ SPEC: tuple[Tier, ...] = (
             Section(
                 "GROQ - primary LLM",
                 "tried first",
-                (Key("GROQ_API_KEY", secret=True), Key("GROQ_MODEL", "llama-3.3-70b-versatile")),
-                ("Order: Groq -> OpenAI -> Anthropic; a provider with no key is skipped.",),
+                (
+                    Key("GROQ_API_KEY", secret=True),
+                    Key("GROQ_MODEL", "openai/gpt-oss-120b"),
+                    Key("GROQ_MAX_OUTPUT_TOKENS", "2000"),
+                ),
+                (
+                    "Order: Groq -> OpenAI -> Anthropic; a provider with no key is skipped.",
+                    "GROQ_MAX_OUTPUT_TOKENS: gpt-oss reasons before answering; 600 is too few",
+                    "Free tier: 8k tokens/min, 1k requests/day; overflow falls back to OpenAI",
+                ),
             ),
             Section(
                 "OPENAI - fallback LLM + embeddings",

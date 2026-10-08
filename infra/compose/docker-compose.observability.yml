@@ -170,7 +170,6 @@ services:
   langfuse-web:
     image: langfuse/langfuse:3
     container_name: p2-langfuse-web
-    restart: unless-stopped
     depends_on: &langfuse_deps
       langfuse-postgres: {condition: service_healthy}
       langfuse-clickhouse: {condition: service_healthy}
@@ -196,7 +195,6 @@ services:
   langfuse-worker:
     image: langfuse/langfuse-worker:3
     container_name: p2-langfuse-worker
-    restart: unless-stopped
     depends_on: *langfuse_deps
     environment:
       <<: *langfuse-shared
@@ -204,7 +202,6 @@ services:
   langfuse-autologin:
     image: python:3.12.15-alpine
     container_name: p2-langfuse-autologin
-    restart: unless-stopped
     command: ["python", "/app/langfuse_autologin.py"]
     environment:
       LANGFUSE_PUBLIC_URL: http://localhost:${LANGFUSE_UI_PORT:-2008}
@@ -221,7 +218,6 @@ services:
   langfuse-postgres:
     image: postgres:15-alpine
     container_name: p2-langfuse-postgres
-    restart: unless-stopped
     environment:
       POSTGRES_USER: ${LANGFUSE_POSTGRES_USER:-langfuse}
       POSTGRES_PASSWORD: ${LANGFUSE_POSTGRES_PASSWORD:-langfuse-local-dev}
@@ -239,7 +235,6 @@ services:
   langfuse-clickhouse:
     image: clickhouse/clickhouse-server:24.3-alpine
     container_name: p2-langfuse-clickhouse
-    restart: unless-stopped
     environment:
       CLICKHOUSE_DB: default
       CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER:-langfuse}
@@ -262,7 +257,6 @@ services:
   langfuse-redis:
     image: redis:7-alpine
     container_name: p2-langfuse-redis
-    restart: unless-stopped
     command: ["redis-server", "--requirepass", "${LANGFUSE_REDIS_AUTH:-langfuse-local-dev}"]
     environment:
       LANGFUSE_REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:-langfuse-local-dev}
@@ -282,7 +276,6 @@ services:
     # the digest. Root, because existing volumes were written by the old root-run image.
     image: cgr.dev/chainguard/minio@sha256:e7ca559d9f7c0b5f24f5f669bb92f40f3ca88d56273b808bf3a7c116c17d2ffa
     container_name: p2-langfuse-minio
-    restart: unless-stopped
     user: "0:0"
     # Pre-creates the bucket so Langfuse's first upload doesn't 404.
     entrypoint: ["sh", "-c", "mkdir -p /data/langfuse && exec minio server /data --address :9000 --console-address :9001"]

@@ -60,7 +60,7 @@ injected text in a review or a listing **cannot add, remove, or reorder a recomm
 | 🧠 **Rating-Aware Ranking** | The recommender core blends **semantic relevance × avg_rating × review-volume confidence** — a 5★-from-2-reviews product can't outrank a 4.5★-from-500 |
 | 🔍 **Hybrid Retrieval** | Qdrant **dense (OpenAI) + sparse (BM25)** hybrid search — catches keyword intent ("neckband", "wired", "bass") that dense-only blurs across near-identical products |
 | 💬 **Grounded, Streaming Explanations** | Cards render first, then the LLM explanation **streams token-by-token** (SSE); reasons are grounded **only** in the provided reviews — it surfaces negatives honestly instead of overselling |
-| 🔁 **Tiered LLM Gateway + Fallback** | **Groq `llama-3.3-70b` → OpenAI `gpt-4o` → Anthropic** via `with_fallbacks` (key-gated) — single-provider outage ≠ full outage |
+| 🔁 **Tiered LLM Gateway + Fallback** | **Groq `gpt-oss-120b` → OpenAI `gpt-4o` → Anthropic** via `with_fallbacks` (key-gated) — single-provider outage ≠ full outage |
 | ⚡ **4-Layer Cache** | L0 in-proc version memo · L1 Redis embedding cache · **L2 Qdrant semantic cache** (near-duplicate queries) · L3 Redis exact-response cache — invalidated by a catalog-version bump |
 | 🔐 **Auth + Quotas** | **Clerk** JWT (RS256 via JWKS) or dev HS256 · per-user Redis token-bucket **rate limiting** (30/min + 500/day) · the auth subject scopes all per-user data |
 | 🛡️ **Security** | Reviews treated as untrusted data · **structural injection-resistance** (LLM writes only reasons; the product set is fixed by ranking) · **PII redaction** in logs · **kill switch** (`LLM_ENABLED=false` → cards without LLM) |
@@ -165,7 +165,7 @@ injected text in a review or a listing **cannot add, remove, or reorder a recomm
 │  → grounded reasons (LangChain structured output; ranker fixes the set) │
 └──────┬─────────────────────────────────────────────────────────────────┘
 ┌──────┼─────────────────────────────────────────────────────────────────┐
-│  LLM gateway · Groq llama-3.3-70b → OpenAI gpt-4o → Anthropic (fallback) │
+│  LLM gateway · Groq gpt-oss-120b → OpenAI gpt-4o → Anthropic (fallback) │
 │  max_tokens cap · circuit breaker → popularity fallback on failure      │
 └─────────────────────────────────────────────────────────────────────────┘
   Observability: OpenTelemetry → Jaeger · Langfuse (LLM cost) · Prometheus → Grafana
@@ -249,7 +249,7 @@ P2-Product-Recommendion-engine/            # uv workspace (monorepo)
 |---|---|
 | **Backend** | Python 3.12 · FastAPI (async) · Pydantic v2 · **uv** workspace |
 | **Orchestration** | LangChain (LCEL) · history-aware rewrite · **structured-output** grounded explanations |
-| **LLM** | **Groq** `llama-3.3-70b` (primary) → OpenAI `gpt-4o` → Anthropic (fallback, key-gated) |
+| **LLM** | **Groq** `gpt-oss-120b` (primary) → OpenAI `gpt-4o` → Anthropic (fallback, key-gated) |
 | **Embeddings** | OpenAI `text-embedding-3-small` @ **1536-d** |
 | **Retrieval [A]** | **Qdrant** hybrid (dense + BM25 sparse) · payload filtering · semantic cache collection |
 | **Retrieval [B]** | **SerpApi** Google Shopping — live offers (price, store, rating, review count); **metered**, guarded by a global Redis day/month budget + 6h result cache |
@@ -372,7 +372,7 @@ files under one Docker project (`p2-recommender`); tiers are picked by service n
 | `make downv` | ⚠️ Stop, **delete every volume and the kind cluster**. |
 | `make full` | Compose only (data + app + observability), never kind. |
 | `make db` / `app` / `obs` / `langfuse` | One tier: data stores / api + web / observability / Langfuse alone. |
-| `make seed` | Build the catalog JSON and index it into Qdrant (needs `OPENAI_API_KEY`). |
+| `make seed` | Index the committed catalog (`data/products.json`) into Qdrant (needs `OPENAI_API_KEY`). `make catalog` rebuilds that file from raw reviews. |
 | `make ps` · `make logs S=api` | Containers + kind nodes · follow logs (one service with `S=`). |
 
 ### Directory and checks

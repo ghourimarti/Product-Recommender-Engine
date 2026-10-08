@@ -67,7 +67,10 @@ def _make_model(provider: str, settings: Settings) -> Any:
         "model": model_names[provider],
         "api_key": SecretStr(api_keys[provider]),
         "temperature": 0.3,
-        "max_tokens": settings.max_output_tokens,  # per-request cost cap
+        # Per-request cost cap. Groq's gpt-oss spends part of it on hidden reasoning.
+        "max_tokens": (
+            settings.groq_max_output_tokens if provider == "groq" else settings.max_output_tokens
+        ),
     }
     # `stream_usage=True` is OpenAI-specific: it opts into `stream_options={"include_usage": True}`
     # so streamed calls emit token counts (without it Langfuse recorded tokens=None / cost=0).

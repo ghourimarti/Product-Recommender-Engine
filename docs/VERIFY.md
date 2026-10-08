@@ -273,6 +273,7 @@ PodDisruptionBudget limits evictions such as node drains, not direct deletes.
 | `make down` then `make up` | Qdrant still has 9 points, Redis keys survive, Langfuse traces survive; kind nodes restart and the app answers again (`make verify` all PASS). |
 | `make upv` | Everything wiped and rebuilt from zero, catalog re-seeded, a new kind cluster (~15 min). |
 | `make up KIND=0` | Compose only; kind left alone. |
+| Reboot the PC (or restart Docker) | No P2 compose container comes back on its own: `make up` starts them. The kind nodes do come back (kind's own restart policy). |
 | Low memory | With another kind cluster running and < 6 GB free, `make up` skips kind and names that cluster. |
 
 ## Verify-yourself checklist

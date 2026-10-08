@@ -16,7 +16,7 @@
 
 .PHONY: help install lint fmt type test check env env-check \
         eval-ranking eval-aggregator eval-rag eval-gate \
-        db services seed app serve build-backend wait-api obs observability langfuse \
+        db services seed catalog app serve build-backend wait-api obs observability langfuse \
         full up upv down downv bootstrap ps logs urls service_ls verify \
         kind-start kind-start-create kind-start-restart kind-start-running kind-start-skip \
         kind-stop kind-status kind-up kind-down kind-addons kind-addons-core kind-addons-monitoring \
@@ -132,9 +132,11 @@ db:             ## Start the data stores
 
 services: db    ## Alias for db
 
-seed:           ## Build the catalog JSON and index it into Qdrant (needs OPENAI_API_KEY)
-	$(PY) -m core.aggregate
+seed:           ## Index the committed catalog (data/products.json) into Qdrant (needs OPENAI_API_KEY)
 	$(PY) -m retrieval.index
+
+catalog:        ## Rebuild data/products.json from raw reviews (CSV=path); then make seed
+	$(PY) -m core.aggregate $(if $(CSV),--csv $(CSV))
 
 
 # ==========================================================================================
@@ -183,6 +185,9 @@ langfuse:       ## Start only Langfuse and its stores
 #
 #  A kind failure doesn't stop up/upv (the - prefix): the compose app still comes up, the
 #  error stays on screen and `make urls` shows kind as down.
+#
+#  Nothing restarts by itself after a reboot (no compose restart policies): run make up.
+#  kind's nodes are the exception (kind sets their policy); make down stops them.
 # ------------------------------------------------------------------------------------------
 
 full:           ## Compose only: data + app + observability (no kind)

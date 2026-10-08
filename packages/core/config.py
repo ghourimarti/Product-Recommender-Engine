@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     embedding_dim: int = 1536
 
     # LLM tiering: Groq primary -> OpenAI escalation -> Anthropic fallback.
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-120b"  # llama-3.3-70b-versatile was retired on Groq
     openai_model: str = "gpt-4o"
     anthropic_model: str = "claude-sonnet-4-6"
 
@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     llm_enabled: bool = True  # kill-switch: false -> serve cached recs, skip LLM explanations
     max_output_tokens: int = 600
+    # gpt-oss reasons before it answers, and the reasoning counts against max_tokens: at 600 its
+    # structured explanations came back empty or cut off (measured 2026-10-08), so Groq gets more.
+    groq_max_output_tokens: int = 2000
 
     # Global SerpApi budget guard. SerpApi is metered (free plan = 250/month), so a
     # single user could otherwise drain the whole quota. 0 disables the cap.

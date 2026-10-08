@@ -252,3 +252,11 @@ def test_every_phony_target_has_a_rule() -> None:
     phony = set(re.search(r"^\.PHONY:(.+)$", joined, re.MULTILINE).group(1).split())  # type: ignore[union-attr]
     rules = set(re.findall(r"^([A-Za-z0-9_.-]+)\s*:(?!=)", MAKEFILE, re.MULTILINE))
     assert phony - rules == set()
+
+
+def test_no_compose_service_restarts_on_its_own() -> None:
+    # After a reboot P2 stays down until `make up`: half a stack (Langfuse without the app) helped
+    # nobody and held memory while other projects ran.
+    for path in COMPOSE.values():
+        for name, svc in yaml.safe_load(path.read_text(encoding="utf-8"))["services"].items():
+            assert "restart" not in svc, f"{path.name}: {name}"
