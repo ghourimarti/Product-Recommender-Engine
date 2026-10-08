@@ -53,3 +53,4 @@ READMEcopy.md
 # Working docs (planning notes, eval reports, runbooks) are kept local only.
 # The CI eval gate reads packages/evaluation/ranking/baseline.json (tracked), not docs/.
 Document/
+data/
