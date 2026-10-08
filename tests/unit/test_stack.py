@@ -50,7 +50,7 @@ def offline(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
 
 def test_defaults_come_from_the_env_spec(tmp_path: Path) -> None:
     env = load_env(tmp_path / "missing.env")
-    assert env["API_PORT"] == "2011" and env["LANGFUSE_AUTOLOGIN_PORT"] == "2019"
+    assert env["API_PORT"] == "2011" and env["LANGFUSE_UI_PORT"] == "2008"
     path = tmp_path / ".env"
     path.write_text("API_PORT=2999\n", encoding="utf-8")
     assert load_env(path)["API_PORT"] == "2999"
@@ -69,7 +69,7 @@ def test_every_listed_container_is_a_compose_container() -> None:
 def test_urls_print_no_credentials(offline: dict[str, str]) -> None:
     out = directory.render(creds=False, cluster="p2")
     assert "sentinel" not in out
-    assert "http://localhost:2012" in out and "http://localhost:2019" in out
+    assert "http://localhost:2012" in out and "http://localhost:2008" in out
 
 
 def test_service_ls_prints_local_logins_but_never_provider_keys(offline: dict[str, str]) -> None:

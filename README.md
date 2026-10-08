@@ -302,7 +302,7 @@ make down         # stop compose + kind nodes, keep all data   (make downv delet
 ```
 
 Nothing asks for a login: **Grafana** is anonymous with 5 provisioned dashboards, **Langfuse** is
-provisioned from `.env` and http://localhost:2019 signs you in, **RedisInsight** has both Redis
+provisioned from `.env` and http://localhost:2008 opens signed in, **RedisInsight** has both Redis
 databases registered. Every LLM call is traced to Langfuse and counted in Prometheus
 (`llm_requests_total` by provider and status), so a dead provider key shows up on a dashboard and
 as the `LLMProviderFailing` alert, not as a silent fallback bill.
@@ -332,7 +332,7 @@ make eval-rag                    # answer quality (custom LLM judge; spends toke
 | 📊 Grafana | http://localhost:2010 (no login): Service health (home), API & LLM, Data stores, Containers, Overview |
 | 📈 Prometheus | http://localhost:2009/targets · `/alerts` (11 rules) |
 | 🕸 Jaeger | http://localhost:2006 · OTLP gRPC `2007` |
-| 🎭 Langfuse | http://localhost:2019 (signs you in) → UI on `2008` |
+| 🎭 Langfuse | http://localhost:2008 (opens signed in: no login form, ever) |
 | 🧰 RedisInsight | http://localhost:2005 (both Redis DBs pre-registered) |
 | 📦 cAdvisor | http://localhost:2020 |
 | 🐘 Postgres (Langfuse) | `localhost:2013` (pgAdmin; logins via `make service_ls`) |

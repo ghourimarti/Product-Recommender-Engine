@@ -4,8 +4,8 @@
 #                  of every service; loads the alert rules shared with Kubernetes
 #   Grafana        anonymous access; Prometheus + Jaeger datasources and the P2 dashboards
 #                  are provisioned
-#   Langfuse       LLM traces; org, project, user and API keys bootstrapped from .env, plus
-#                  langfuse-autologin (:2019) which opens the UI already signed in
+#   Langfuse       LLM traces; org, project, user and API keys bootstrapped from .env.
+#                  langfuse-autologin is its front door on :2008: every page opens signed in
 #   RedisInsight   both Redis databases pre-registered from env (no init sidecar)
 #   exporters      redis (x2), postgres, blackbox (health probes), cAdvisor (containers)
 # Host ports are bound to 127.0.0.1 only.
@@ -175,8 +175,7 @@ services:
       langfuse-clickhouse: {condition: service_healthy}
       langfuse-redis: {condition: service_healthy}
       langfuse-minio: {condition: service_healthy}
-    ports:
-      - "127.0.0.1:${LANGFUSE_UI_PORT:-2008}:3000"
+    # No host port: the browser reaches Langfuse through langfuse-autologin, which signs it in.
     environment:
       <<: *langfuse-shared
       NEXTAUTH_URL: http://localhost:${LANGFUSE_UI_PORT:-2008}
@@ -211,7 +210,7 @@ services:
     volumes:
       - ../../ops/observability/langfuse_autologin.py:/app/langfuse_autologin.py:ro
     ports:
-      - "127.0.0.1:${LANGFUSE_AUTOLOGIN_PORT:-2019}:8080"
+      - "127.0.0.1:${LANGFUSE_UI_PORT:-2008}:8080"
     depends_on:
       - langfuse-web
 

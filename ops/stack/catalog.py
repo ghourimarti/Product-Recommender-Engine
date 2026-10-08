@@ -308,15 +308,14 @@ def compose_groups(env: Mapping[str, str]) -> list[Group]:
                 ),
                 Item(
                     "Langfuse (LLM traces, cost)",
-                    "p2-langfuse-web",
+                    "p2-langfuse-autologin",  # the front door that serves the port
                     (
                         Link(
-                            f"http://localhost:{e['LANGFUSE_AUTOLOGIN_PORT']}",
-                            "signs you in, opens traces",
+                            f"http://localhost:{e['LANGFUSE_UI_PORT']}", "opens signed in, no login"
                         ),
-                        Link(f"http://localhost:{e['LANGFUSE_UI_PORT']}", "the UI itself"),
                     ),
                     (
+                        ("login", "automatic (the form never shows); for the SDK or API:"),
                         ("email", e["LANGFUSE_INIT_USER_EMAIL"]),
                         ("password", e["LANGFUSE_INIT_USER_PASSWORD"]),
                         ("org / proj", "p2-recommender-org / p2-recommender-project"),

@@ -162,7 +162,7 @@ wait-api:       ## Wait up to 90 s for the API's /health
 # ==========================================================================================
 #  Jaeger, Prometheus (+ exporters, blackbox probes, cAdvisor), Grafana, RedisInsight and a
 #  self-hosted Langfuse. Nothing asks for a login: Grafana is anonymous, RedisInsight has both
-#  Redis databases registered, Langfuse is provisioned from .env and :2019 signs you in.
+#  Redis databases registered, Langfuse is provisioned from .env and opens signed in.
 #  Langfuse's first cold start takes 1-3 min (ClickHouse + migrations).
 # ------------------------------------------------------------------------------------------
 

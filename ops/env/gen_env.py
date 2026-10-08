@@ -287,10 +287,9 @@ SPEC: tuple[Tier, ...] = (
             ),
             Section(
                 "LANGFUSE - LLM traces, tokens, cost",
-                "http://localhost:2019 signs you in; the UI itself is on :2008",
+                "http://localhost:2008 - opens signed in, no login form",
                 (
                     Key("LANGFUSE_UI_PORT", "2008"),
-                    Key("LANGFUSE_AUTOLOGIN_PORT", "2019"),
                     Key(
                         "LANGFUSE_HOST",
                         "http://localhost:2008",

@@ -776,7 +776,7 @@ LINKS = [
     {
         "title": "Langfuse (signed in)",
         "type": "link",
-        "url": "http://localhost:2019",
+        "url": "http://localhost:2008",
         "targetBlank": True,
     },
     {"title": "Jaeger", "type": "link", "url": "http://localhost:2006", "targetBlank": True},

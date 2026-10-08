@@ -53,7 +53,7 @@ find its footprint in each tool.
 6. **RedisInsight** http://localhost:2005 → *p2-redis (app cache)* → Browser. You should see an
    `agg:…` key (the cached answer) and `serpapi:spend:day:<today>` / `serpapi:spend:month:<month>`
    (the budget counters). The second ask didn't increment them.
-7. **Langfuse** http://localhost:2019 (signs you in) → *Tracing*. The newest trace has a
+7. **Langfuse** http://localhost:2008 (opens signed in) → *Tracing*. The newest trace has a
    generation with the **model** (e.g. `gpt-4o`), input/output **tokens** and **cost**.
 8. **Jaeger** http://localhost:2006 → Service `p2-recommender` → *Find Traces*. The
    `POST /aggregate/stream` trace shows the request's spans and timings.
@@ -166,10 +166,13 @@ Service `p2-recommender` → *Find Traces*. One trace per request; `/aggregate/s
 traces show where the time went. No `p2-recommender` service means the API can't reach
 `jaeger:4317`: `docker logs p2-api` and `docker logs p2-jaeger`.
 
-### Langfuse (:2019 → :2008)
+### Langfuse (:2008)
 
-- http://localhost:2019 signs you in (the session cookie is set by a small proxy; no form) and opens
-  *Tracing* of `p2-recommender-project`. Typing the login also works, from `make service_ls`.
+- http://localhost:2008, or any Langfuse link: it opens signed in, never on a login form. A small
+  front door (`langfuse-autologin`) sits on the port and signs the browser in whenever it has no
+  valid session: first visit, after `make upv` wiped Langfuse, an expired session, even after
+  *Sign out*. Prove it: open http://localhost:2008/auth/sign-in, which is the login page itself.
+  You land on *Tracing* instead.
 - A trace → its **generation**: model, prompt, completion, tokens, latency, cost.
 - **CLI** (project keys from `make service_ls`):
   ```powershell
@@ -282,7 +285,7 @@ PodDisruptionBudget limits evictions such as node drains, not direct deletes.
 - [ ] `make verify LIVE=1` → every provider you have a key for PASSes (an expired key FAILs and says so)
 - [ ] Section 1: sign in, ask, see cards then reasons; ask again, instant
 - [ ] The same question visible in Grafana, RedisInsight, Langfuse (model + cost) and Jaeger
-- [ ] Grafana opened with no login; Langfuse opened through :2019 with no login; RedisInsight shows both DBs
+- [ ] Grafana opened with no login; Langfuse opened (even /auth/sign-in) with no login; RedisInsight shows both DBs
 - [ ] pgAdmin connects to Langfuse Postgres with the `service_ls` logins; MinIO console login works
 - [ ] `docker stop p2-api` → `ApiDown` fires within ~3 min → `docker start p2-api` → resolves
 - [ ] http://app.localhost works and `make kind-smoke` passes

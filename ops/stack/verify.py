@@ -298,13 +298,36 @@ class Verifier:
         return Result(PASS if r.status_code == 200 else FAIL, f"HTTP {r.status_code} {r.text[:60]}")
 
     def langfuse_autologin(self) -> Result:
-        r = self.http.get(self.url("LANGFUSE_AUTOLOGIN_PORT", "/"), follow_redirects=False)
-        cookie = "next-auth.session-token" in r.headers.get("set-cookie", "")
-        where = r.headers.get("location", "")
-        ok = r.status_code == 302 and cookie and "/project/" in where
-        return Result(
-            PASS if ok else FAIL, f"HTTP {r.status_code}, session cookie {cookie}, -> {where}"
-        )
+        """Open :2008 like a browser: with no session, a stale one, or the sign-in page itself."""
+        page = "/project/p2-recommender-project/traces"
+        browser = {"Accept": "text/html", "Sec-Fetch-Mode": "navigate"}
+        outcomes = []
+        for label, path, cookie in (
+            ("no session", page, ""),
+            ("stale session", page, "next-auth.session-token=stale"),
+            ("sign-in page", f"/auth/sign-in?callbackUrl={page}", ""),
+        ):
+            r = self.http.get(
+                self.url("LANGFUSE_UI_PORT", path),
+                headers={**browser, "Cookie": cookie},
+                follow_redirects=False,
+            )
+            fresh = "next-auth.session-token=" in r.headers.get("set-cookie", "")
+            where = r.headers.get("location", "")
+            if r.status_code != 302 or not fresh or not where.endswith(page):
+                return Result(FAIL, f"{label}: HTTP {r.status_code}, cookie {fresh}, -> {where}")
+            signed = {"Cookie": r.headers["set-cookie"].split(";", 1)[0]}
+            landed = self.http.get(
+                self.url("LANGFUSE_UI_PORT", page),
+                headers={**browser, **signed},
+                follow_redirects=False,
+            )
+            if landed.status_code != 200:
+                return Result(
+                    FAIL, f"{label}: signed in, but the page answered HTTP {landed.status_code}"
+                )
+            outcomes.append(label)
+        return Result(PASS, f"lands signed in every time ({', '.join(outcomes)})")
 
     def langfuse_traces(self) -> Result:
         auth = (self.env["LANGFUSE_PUBLIC_KEY"], self.env["LANGFUSE_SECRET_KEY"])
@@ -603,7 +626,7 @@ class Verifier:
         yield "OBSERVABILITY", "grafana panel data", self.grafana_panels
         yield "OBSERVABILITY", "jaeger traces", self.jaeger
         yield "OBSERVABILITY", "langfuse health", self.langfuse
-        yield "OBSERVABILITY", "langfuse auto-login", self.langfuse_autologin
+        yield "OBSERVABILITY", "langfuse no login", self.langfuse_autologin
         yield "OBSERVABILITY", "langfuse traces", self.langfuse_traces
         yield "OBSERVABILITY", "redisinsight", self.redisinsight
         yield "OBSERVABILITY", "cadvisor", self.cadvisor
