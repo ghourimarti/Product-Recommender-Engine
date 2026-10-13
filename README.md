@@ -569,7 +569,7 @@ Table: p2-recommender
 | **Tests** | **117** (108 offline + 9 integration-marked) · mypy **strict** clean · ruff clean | `uv run pytest --collect-only -q` |
 | **Dependency CVEs** | **0 unignored** — `pip-audit` + `npm audit --omit=dev --audit-level=high` (runtime dependencies) block every PR. First run found 36 Python advisories in 11 packages (incl. `starlette` on the request path) and 3 npm high-severity groups (incl. Next.js SSRF); all cleared by upgrade. Six langchain advisories remain **enumerated by ID**, not suppressed by package — a *new* langchain CVE still fails the build. See [Roadmap](#-roadmap) |
 | **Cost** | Search-metered, not compute-bound: SerpApi free tier is 250/month and every cache miss spends one. Global day/month budget guard + 6h result cache. LLM cost capped by `MAX_OUTPUT_TOKENS` + kill switch | `SERPAPI_*` in `.env.example` |
-| **Deploy** | Local Docker verified (API image builds, `/health` OK) · Helm chart structurally validated · Terraform applied** | `make helm-lint`, `terraform validate` , `terraform apply` |
+| **Deploy** | Local Docker verified (API image builds, `/health` OK) · Helm chart structurally validated · Terraform | `make helm-lint`, `terraform validate` , `terraform apply` |
 
 > **Where these numbers come from.** Only the aggregator eval and the test/CVE counts are
 > reproducible from a bare clone — the rest need a seeded Qdrant and API keys, so their reports are
