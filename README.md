@@ -571,13 +571,6 @@ Table: p2-recommender
 | **Cost** | Search-metered, not compute-bound: SerpApi free tier is 250/month and every cache miss spends one. Global day/month budget guard + 6h result cache. LLM cost capped by `MAX_OUTPUT_TOKENS` + kill switch | `SERPAPI_*` in `.env.example` |
 | **Deploy** | Local Docker verified (API image builds, `/health` OK) · Helm chart structurally validated · Terraform | `make helm-lint`, `terraform validate` , `terraform apply` |
 
-> **Where these numbers come from.** Only the aggregator eval and the test/CVE counts are
-> reproducible from a bare clone — the rest need a seeded Qdrant and API keys, so their reports are
-> not committed and you are taking them on trust. That distinction is deliberate: the one number
-> this project actually gates CI on is the one you can verify yourself, offline, in seconds.
-> The 4-fixture aggregator set is a sanity check, not a benchmark, and the report says so itself.
-
-
 ---
 
 ## 🐳 Deployment
