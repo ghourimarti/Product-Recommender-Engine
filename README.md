@@ -564,7 +564,7 @@ Table: p2-recommender
 |---|---|---|
 | **Aggregator ranking** *(the shipped path)* | **NDCG@3 = 0.9413 · MRR = 1.0000** vs Google Shopping's own order at **0.8240 / 0.8750** — 4 recorded fixtures | `make eval-aggregator` — offline, no keys, **report committed** at [`reports/aggregator-eval.md`](reports/aggregator-eval.md) |
 | **Catalog ranking** | NDCG@3 = 0.80 · MRR = 0.83 · Recall@3 = 0.82 (16-query attribute-labelled golden set) | `make eval-ranking` — **needs a seeded Qdrant + `OPENAI_API_KEY`**, so the report is not committed |
-| **Answer quality** | answer-relevancy 0.94 · context-precision 0.65 · **faithfulness 0.86** | `make eval-rag` — **needs LLM keys**, report not committed |
+| **Answer quality** | answer-relevancy 0.94 · context-precision 0.65 · **faithfulness 0.86** | `make eval-rag` — **needs LLM keys** |
 | **Reranker A/B** | bge cross-encoder **regressed** NDCG@3 (−0.02) / Recall@3 (−0.07) → **gated off** (measure, don't assume) | part of `make eval-ranking`, same requirements |
 | **Tests** | **117** (108 offline + 9 integration-marked) · mypy **strict** clean · ruff clean | `uv run pytest --collect-only -q` |
 | **Dependency CVEs** | **0 unignored** — `pip-audit` + `npm audit --omit=dev --audit-level=high` (runtime dependencies) block every PR. First run found 36 Python advisories in 11 packages (incl. `starlette` on the request path) and 3 npm high-severity groups (incl. Next.js SSRF); all cleared by upgrade. Six langchain advisories remain **enumerated by ID**, not suppressed by package — a *new* langchain CVE still fails the build. See [Roadmap](#-roadmap) |
