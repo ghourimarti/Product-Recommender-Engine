@@ -50,7 +50,8 @@ SVC_DATA := qdrant dynamodb redis
 SVC_APP  := api web
 SVC_LF   := langfuse-web langfuse-worker langfuse-autologin langfuse-postgres langfuse-clickhouse \
             langfuse-redis langfuse-minio
-SVC_OBS  := jaeger prometheus grafana redisinsight cadvisor blackbox-exporter redis-exporter \
+SVC_OBS  := jaeger prometheus grafana redisinsight cadvisor node-exporter blackbox-exporter \
+            redis-exporter \
             langfuse-redis-exporter postgres-exporter $(SVC_LF)
 
 API_PORT ?= 2011

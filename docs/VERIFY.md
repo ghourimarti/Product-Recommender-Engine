@@ -47,9 +47,9 @@ find its footprint in each tool.
    - Request headers: `Authorization: Bearer eyJ…`, a Clerk session token.
    - Response: `text/event-stream`: an `offers` event (the cards), a `final` event (cards +
      reasons), then `done`. A cached answer skips straight to `final`.
-5. **Grafana** http://localhost:2010 → *P2 - API & LLM*. *Requests/s by endpoint* shows
-   `/aggregate/stream`. *LLM calls by provider* shows which LLM answered. *LLM tokens* and
-   *SerpApi searches* moved.
+5. **Grafana** http://localhost:2010 → *P2 · API & LLM*. In *1.1 — Requests*, *Requests/s by
+   endpoint* shows `/aggregate/stream`; *2.0 — All providers* shows which LLM answered and its
+   tokens; *3 — Cache and the live shopping source* shows the SerpApi search it spent.
 6. **RedisInsight** http://localhost:2005 → *p2-redis (app cache)* → Browser. You should see an
    `agg:…` key (the cached answer) and `serpapi:spend:day:<today>` / `serpapi:spend:month:<month>`
    (the budget counters). The second ask didn't increment them.
@@ -137,18 +137,25 @@ the token expired: copy a fresh one.
 
 ### Grafana (:2010): no login
 
-Open http://localhost:2010. The home dashboard is **P2 - Service health**. Check:
+Open http://localhost:2010 (Grafana 13). Every dashboard reads top-down as numbered questions;
+click a section title (or a sub-section like *1.1 — Services*) to fold it. The home dashboard is
+**P2 · Service health**. Check:
 
-- **Services:** every tile `UP` (blackbox probes every 15 s). A red tile names the dead service.
-- **Metrics endpoints scraped:** every tile `UP`.
-- **Firing alerts:** `0`. If not, Prometheus → Alerts shows which.
-- **Dashboards (folder P2):** *API & LLM* (traffic, errors, latency, LLM calls, tokens, cache,
-  SerpApi), *Data stores* (Redis ×2, Postgres, ClickHouse, MinIO, Qdrant), *Containers* (CPU and
-  memory per container, from cAdvisor), *Overview*.
+- **0 — At a glance:** *Probes down*, *Targets down* and *Firing alerts* all `0`.
+- **1.1 — Services:** every tile `UP`, grouped App / Data stores / Observability / Langfuse. A red
+  tile names the dead service. **1.2 — Metrics endpoints:** every tile `UP`.
+- **2 — Is anything firing?:** the table is empty, or names the alert.
+- **Dashboards (P2 dropdown, top left):**
+  - *P2 · API & LLM*: traffic, latency (with the 2 s target line and a heatmap), errors, then the
+    LLM chain (one collapsed sub-section per provider), cache and SerpApi, the API process.
+  - *P2 · Data stores*: Qdrant, both Redis, Postgres, ClickHouse, MinIO, DynamoDB-local; each
+    store's details are a collapsed sub-section.
+  - *P2 · Docker VM & containers*: the Docker VM's memory, CPU, swap and disk (node-exporter),
+    every container (cAdvisor), and the monitoring stack itself.
 - **Explore → Jaeger:** search traces without leaving Grafana.
 - **Broken:** "No data" on a panel *after* you've used the app means a broken query or scrape.
-  Before the first request some panels are legitimately empty. `make verify` runs every panel's
-  query and lists the empty ones.
+  Panels that are legitimately empty while idle say so instead (e.g. "not called in this window"
+  for OpenAI when Groq answered everything). `make verify` runs every panel's query.
 
 ### Prometheus (:2009)
 
@@ -174,6 +181,10 @@ traces show where the time went. No `p2-recommender` service means the API can't
   *Sign out*. Prove it: open http://localhost:2008/auth/sign-in, which is the login page itself.
   You land on *Tracing* instead.
 - A trace → its **generation**: model, prompt, completion, tokens, latency, cost.
+- A trace → the **Graph** panel under the tree (*Aggregated* / *Expanded*): the same LangChain
+  steps drawn as a flow, `__start__` → RunnableSequence → … → ChatGroq → `__end__`. Langfuse draws
+  it because the SDK records each LangChain step as a typed `chain` (traces from before the SDK v4
+  upgrade have no graph).
 - **CLI** (project keys from `make service_ls`):
   ```powershell
   curl.exe -s -u "<public key>:<secret key>" "http://localhost:2008/api/public/traces?limit=1"
@@ -189,7 +200,7 @@ Both databases are listed without adding anything: *p2-redis (app cache)* and *p
 ### cAdvisor (:2020)
 
 http://localhost:2020/containers/: live CPU/memory per container. The same data is graphed in
-Grafana → *P2 - Containers*.
+Grafana → *P2 · Docker VM & containers*.
 
 ## 6. Langfuse's own stores
 
@@ -234,7 +245,7 @@ P2 runs no local GPU engine (no vLLM/SGLang). The LLMs are hosted and tried in o
 | SerpApi | Google Shopping | `serpapi account PASS` + searches left this month (free call) |
 | Local, CPU | fastembed `Qdrant/bm25` (hybrid search, inside the API) | qdrant points carry a sparse vector |
 
-**Which rung actually answered:** Grafana → *API & LLM* → *LLM calls by provider* / *LLM failure %*,
+**Which rung actually answered:** Grafana → *P2 · API & LLM* → *2.0 — All providers* (and 2.1–2.3 per provider),
 or a Langfuse generation's `model`. A dead key doesn't break the app: the next rung answers. But
 it costs more, so it's alerted: `LLMProviderFailing` fires when a provider fails >50% of ≥3 calls
 for 5 min.

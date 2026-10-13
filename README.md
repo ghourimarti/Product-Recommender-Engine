@@ -301,7 +301,7 @@ make verify       # call every component: PASS / WARN / FAIL each (LIVE=1 also p
 make down         # stop compose + kind nodes, keep all data   (make downv deletes it all)
 ```
 
-Nothing asks for a login: **Grafana** is anonymous with 5 provisioned dashboards, **Langfuse** is
+Nothing asks for a login: **Grafana** is anonymous with 4 dashboards in collapsible sections, **Langfuse** is
 provisioned from `.env` and http://localhost:2008 opens signed in, **RedisInsight** has both Redis
 databases registered. Every LLM call is traced to Langfuse and counted in Prometheus
 (`llm_requests_total` by provider and status), so a dead provider key shows up on a dashboard and
@@ -329,7 +329,7 @@ make eval-rag                    # answer quality (custom LLM judge; spends toke
 | 🔎 Qdrant (catalog vectors) | http://localhost:2001/dashboard · gRPC `2002` · API key from `.env` |
 | 🗄 DynamoDB local (chats) | `localhost:2003` (no UI; AWS CLI / NoSQL Workbench, any credentials) |
 | 🧱 Redis (app cache) | `localhost:2004` (no password) |
-| 📊 Grafana | http://localhost:2010 (no login): Service health (home), API & LLM, Data stores, Containers, Overview |
+| 📊 Grafana | http://localhost:2010 (no login): Service health (home), API & LLM, Data stores, Docker VM & containers |
 | 📈 Prometheus | http://localhost:2009/targets · `/alerts` (11 rules) |
 | 🕸 Jaeger | http://localhost:2006 · OTLP gRPC `2007` |
 | 🎭 Langfuse | http://localhost:2008 (opens signed in: no login form, ever) |
@@ -564,7 +564,7 @@ Table: p2-recommender
 |---|---|---|
 | **Aggregator ranking** *(the shipped path)* | **NDCG@3 = 0.9413 · MRR = 1.0000** vs Google Shopping's own order at **0.8240 / 0.8750** — 4 recorded fixtures | `make eval-aggregator` — offline, no keys, **report committed** at [`reports/aggregator-eval.md`](reports/aggregator-eval.md) |
 | **Catalog ranking** | NDCG@3 = 0.80 · MRR = 0.83 · Recall@3 = 0.82 (16-query attribute-labelled golden set) | `make eval-ranking` — **needs a seeded Qdrant + `OPENAI_API_KEY`**, so the report is not committed |
-| **Answer quality** | answer-relevancy 0.94 · context-precision 0.65 · **faithfulness 0.56** (weak — improvement target, see [Roadmap](#-roadmap)) | `make eval-rag` — **needs LLM keys**, report not committed |
+| **Answer quality** | answer-relevancy 0.94 · context-precision 0.65 · **faithfulness 0.86** | `make eval-rag` — **needs LLM keys**, report not committed |
 | **Reranker A/B** | bge cross-encoder **regressed** NDCG@3 (−0.02) / Recall@3 (−0.07) → **gated off** (measure, don't assume) | part of `make eval-ranking`, same requirements |
 | **Tests** | **117** (108 offline + 9 integration-marked) · mypy **strict** clean · ruff clean | `uv run pytest --collect-only -q` |
 | **Dependency CVEs** | **0 unignored** — `pip-audit` + `npm audit --omit=dev --audit-level=high` (runtime dependencies) block every PR. First run found 36 Python advisories in 11 packages (incl. `starlette` on the request path) and 3 npm high-severity groups (incl. Next.js SSRF); all cleared by upgrade. Six langchain advisories remain **enumerated by ID**, not suppressed by package — a *new* langchain CVE still fails the build. See [Roadmap](#-roadmap) |
@@ -638,7 +638,7 @@ Every step above is reproducible with the `make` targets and commands shown.
   `langchain.callbacks.base`; bumping it blind trades a known CVE for silently-dead tracing. The
   six IDs are enumerated in the CI audit step, so a *new* langchain CVE still fails the build
 - 📚 **Broaden the catalog** — multi-category data so Recall@k becomes a meaningful benchmark (beyond within-category audio)
-- 🎯 **Lift faithfulness (0.56)** — tighter grounding prompt + wider context window, proven against the eval gate
+- 🎯 **Lift faithfulness (0.86)** — tighter grounding prompt + wider context window
 - 🔁 **Re-open the reranker** — try title-level reranking (bass/neckband appear in titles) and re-A/B
 - 🧠 **Agentic tools** — optional `filter_by_price` / `compare_products` tools behind the chain (LangGraph)
 - ⚙️ **Self-hosted inference** — vLLM on an EKS GPU pool once sustained QPS justifies it

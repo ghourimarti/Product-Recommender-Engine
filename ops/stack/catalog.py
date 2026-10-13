@@ -273,7 +273,7 @@ def compose_groups(env: Mapping[str, str]) -> list[Group]:
                     (
                         Link(
                             f"http://localhost:{e['GRAFANA_PORT']}",
-                            "no login; folder P2 has 5 boards",
+                            "no login; folder P2 has 4 boards",
                         ),
                     ),
                     (
@@ -343,7 +343,7 @@ def compose_groups(env: Mapping[str, str]) -> list[Group]:
             ),
             footer=(
                 "Exporters (no UI; Prometheus scrapes them): redis, langfuse-redis, postgres,",
-                "blackbox (HTTP/TCP probes of every service).",
+                "blackbox (HTTP/TCP probes of every service), node-exporter (the Docker VM).",
             ),
         ),
         Group(
@@ -440,7 +440,7 @@ def model_group(env: Mapping[str, str]) -> Group:
         footer=(
             f"LLM_ENABLED={e.get('LLM_ENABLED', 'true')}; SerpApi budget "
             f"{e.get('SERPAPI_DAILY_BUDGET')}/day, {e.get('SERPAPI_MONTHLY_BUDGET')}/month",
-            "Which provider answered: Grafana > P2 - API & LLM > 'LLM calls by provider',",
+            "Which provider answered: Grafana > P2 · API & LLM > 2.0 'Calls/min by provider',",
             "or Langfuse > Traces > a trace > its generation (model, tokens, cost).",
             "[key ] = the key is set, not that it works: make verify LIVE=1 calls each provider.",
             "Provider keys are never printed; they live in .env.",

@@ -29,19 +29,12 @@ import redis
 import yaml
 
 from infra.kind.image_tag import image_tag
+from ops.observability.grafana.build_dashboards import DASHBOARDS, walk
 from ops.stack.catalog import ROOT, KindState, kind_clusters, load_env, run
 
 PASS, WARN, FAIL, SKIP = "PASS", "WARN", "FAIL", "SKIP"
-DASHBOARD_DIRS = (
-    ROOT / "ops/helm/p2-recommender/files/dashboards",
-    ROOT / "ops/observability/grafana/dashboards",
-)
 ALERTS = ROOT / "ops/helm/p2-recommender/files/alerts.yaml"
 CATALOG = ROOT / "data/products.json"
-# Counters that only exist once their event has happened (an outage, a block, an OOM kill).
-EVENT_METRICS = re.compile(
-    r"\b(source_unavailable_total|guardrail_blocks_total|container_oom_events_total)\b"
-)
 SECRET_HINT = re.compile(r"KEY|SECRET|PASSWORD|AUTH|TOKEN")
 
 
@@ -225,11 +218,7 @@ class Verifier:
 
     def grafana(self) -> Result:
         health = self.get("GRAFANA_PORT", "/api/health").json()
-        expected = {
-            json.loads(p.read_text(encoding="utf-8"))["uid"]
-            for d in DASHBOARD_DIRS
-            for p in d.glob("*.json")
-        }
+        expected = {make().uid for make in DASHBOARDS}
         found = {
             d["uid"]
             for d in self.get("GRAFANA_PORT", "/api/search", params={"type": "dash-db"}).json()
@@ -251,30 +240,28 @@ class Verifier:
         )
 
     def grafana_panels(self) -> Result:
-        now, total, empty = time.time(), 0, []
-        for folder in DASHBOARD_DIRS:
-            for path in sorted(folder.glob("*.json")):
-                dash = json.loads(path.read_text(encoding="utf-8"))
-                for panel in dash["panels"]:
-                    for target in panel.get("targets", []):
-                        expr = target.get("expr")
-                        if not expr or EVENT_METRICS.search(expr):
-                            continue
-                        total += 1
-                        res = self.get(
-                            "PROMETHEUS_PORT",
-                            "/api/v1/query_range",
-                            params={"query": expr, "start": now - 1800, "end": now, "step": 60},
-                        ).json()
-                        values = [
-                            float(v)
-                            for s in res.get("data", {}).get("result", [])
-                            for _, v in s["values"]
-                        ]
-                        if res.get("status") != "success" or not [
-                            v for v in values if not math.isnan(v)
-                        ]:
-                            empty.append(f"{dash['uid']}/{panel['title']}")
+        """Every dashboard query, run against Prometheus over the last 30 min."""
+        now, total, empty, broken = time.time(), 0, [], []
+        for make in DASHBOARDS:
+            dash = make()
+            for panel in walk(dash.sections):
+                if panel.idle_ok:  # empty while nothing happens (no OOM kill, no fallback)
+                    continue
+                for target in panel.targets:
+                    total += 1
+                    res = self.get(
+                        "PROMETHEUS_PORT",
+                        "/api/v1/query_range",
+                        params={"query": target.expr, "start": now - 1800, "end": now, "step": 60},
+                    ).json()
+                    if res.get("status") != "success":
+                        broken.append(f"{dash.uid}/{panel.title}: {res.get('error', '')[:80]}")
+                        continue
+                    values = [float(v) for s in res["data"]["result"] for _, v in s["values"]]
+                    if not [v for v in values if not math.isnan(v)]:
+                        empty.append(f"{dash.uid}/{panel.title}")
+        if broken:
+            return Result(FAIL, f"{len(broken)} invalid queries: {'; '.join(broken[:3])}")
         if not empty:
             return Result(PASS, f"{total}/{total} panel queries return data (last 30 min)")
         panels = list(dict.fromkeys(empty))  # a panel with p50 + p95 targets is listed once

@@ -67,6 +67,10 @@ scrape_configs:
     static_configs:
       - targets: ['cadvisor:8080']
 
+  - job_name: node
+    static_configs:
+      - targets: ['node-exporter:9100']
+
   # ---- health of EVERY service, via the blackbox exporter -------------------------------
   # The target is the URL (http_2xx) or host:port (tcp_connect) to probe; relabelling turns it
   # into the probe's parameter and keeps it as the `instance` label.

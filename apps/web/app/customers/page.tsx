@@ -5,21 +5,6 @@ import { Container, Reveal } from "@/components/marketing/primitives";
 
 export const metadata = { title: "Evidence — ProductIQ" };
 
-/**
- * This page used to be "Customers": three case studies with named people
- * ("Meera Kapoor, Head of Ecommerce"), asserted business outcomes ("+18% search
- * conversion", "-12% return rate"), and a six-quote "wall of love" — all invented,
- * for a product with zero users, under the headline "Teams that ship discovery
- * shoppers trust" and a "Ready to join them?" call to action.
- *
- * None of it was real, and unlike the landing page it carried no demo disclaimer.
- * Inventing named customers and the results they got is misrepresentation, not
- * placeholder copy, so it is gone.
- *
- * What replaces it is the only honest version of this page: the measurements the
- * repo can actually reproduce, each one traceable to a command you can run.
- */
-
 const EVIDENCE = [
   {
     icon: Target,

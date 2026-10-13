@@ -30,7 +30,9 @@ def test_compose_mounts_the_shared_files() -> None:
         v.split(":")[0] for name in ("prometheus", "grafana") for v in services[name]["volumes"]
     ]
     shared = [s for s in sources if "ops/helm/p2-recommender/files" in s]
-    assert len(shared) == 2  # the rules file and the dashboards directory
+    # The rules file. Dashboards are generated for both (tests/unit/test_dashboards.py): compose
+    # runs Grafana 13 (v2 format), Kubernetes Grafana 12 (classic), from one definition.
+    assert len(shared) == 1
     for source in shared:
         assert (COMPOSE.parent / source).resolve().exists(), source
 
