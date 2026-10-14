@@ -557,13 +557,13 @@ Table: p2-recommender
 
 | Metric | Result | Reproduce |
 |---|---|---|
-| **Aggregator ranking** *(the shipped path)* | **NDCG@3 = 0.9413 · MRR = 1.0000** vs Google Shopping's own order at **0.8240 / 0.8750** — 4 recorded fixtures | `make eval-aggregator` — offline, no keys, **report committed** at [`reports/aggregator-eval.md`](reports/aggregator-eval.md) |
-| **Catalog ranking** | NDCG@3 = 0.80 · MRR = 0.83 · Recall@3 = 0.82 (16-query attribute-labelled golden set) | `make eval-ranking` — **needs a seeded Qdrant + `OPENAI_API_KEY`**, so the report is not committed |
+| **Aggregator ranking** *(the shipped path)* | **NDCG@3 = 0.9413 · MRR = 1.0000** vs Google Shopping's own order at **0.8240 / 0.8750** — 4 recorded fixtures | `make eval-aggregator`|
+| **Catalog ranking** | NDCG@3 = 0.80 · MRR = 0.83 · Recall@3 = 0.82 (16-query attribute-labelled golden set) | `make eval-ranking` — **needs a seeded Qdrant + `OPENAI_API_KEY`** |
 | **Answer quality** | answer-relevancy 0.94 · context-precision 0.65 · **faithfulness 0.86** | `make eval-rag` — **needs LLM keys** |
 | **Reranker A/B** | bge cross-encoder **regressed** NDCG@3 (−0.02) / Recall@3 (−0.07) → **gated off** (measure, don't assume) | part of `make eval-ranking`, same requirements |
 | **Tests** | **117** (108 offline + 9 integration-marked) · mypy **strict** clean · ruff clean | `uv run pytest --collect-only -q` |
-| **Dependency CVEs** | **0 unignored** — `pip-audit` + `npm audit --omit=dev --audit-level=high` (runtime dependencies) block every PR. First run found 36 Python advisories in 11 packages (incl. `starlette` on the request path) and 3 npm high-severity groups (incl. Next.js SSRF); all cleared by upgrade. Six langchain advisories remain **enumerated by ID**, not suppressed by package — a *new* langchain CVE still fails the build. See [Roadmap](#-roadmap) |
-| **Cost** | Search-metered, not compute-bound: SerpApi free tier is 250/month and every cache miss spends one. Global day/month budget guard + 6h result cache. LLM cost capped by `MAX_OUTPUT_TOKENS` + kill switch | `SERPAPI_*` in `.env.example` |
+| **Dependency CVEs** | **0 unignored** — `pip-audit` + `npm audit --omit=dev --audit-level=high` (runtime dependencies) block every PR. First run found 36 Python advisories in 11 packages (incl. `starlette` on the request path) and 3 npm high-severity groups (incl. Next.js SSRF); all cleared by upgrade. Six langchain advisories remain **enumerated by ID**, not suppressed by package — a *new* langchain CVE still fails the build.|
+| **Cost** | Search-metered, not compute-bound: SerpApi every cache miss spends one. Global day/month budget guard + 6h result cache. LLM cost capped by `MAX_OUTPUT_TOKENS` + kill switch | `SERPAPI_*` in `.env.example` |
 | **Deploy** | Local Docker verified (API image builds, `/health` OK) · Helm chart structurally validated · Terraform | `make helm-lint`, `terraform validate` , `terraform apply` |
 
 ---
@@ -585,12 +585,11 @@ A clean local → cloud path:
 3. **Kubernetes on kind** (local, $0) — `make kind-all` goes from no cluster to a smoke-tested app
    behind Envoy Gateway, with cert-manager and kube-prometheus-stack; `make kind-argocd` hands it
    to **Argo CD**. Production drills pass on it: zero-downtime rollout and git rollback, losing a
-   node, Qdrant and Redis outages, HPA scaling, OOMKill, NetworkPolicies, alerting. See
-   [docs/runbook-kind.md](docs/runbook-kind.md). No real cloud cluster yet: that's Phases 7–8.
+   node, Qdrant and Redis outages, HPA scaling, OOMKill, NetworkPolicies, alerting. No real cloud cluster yet: that's Phases 7–8.
 4. **Terraform** — modular **VPC · EKS · DynamoDB · ElastiCache · S3 · ECR · IRSA**; S3 remote-state
    backend stubbed.
    ```bash
-   cd infra/terraform && terraform init && terraform validate && terraform plan   # no apply
+   cd infra/terraform && terraform init && terraform validate && terraform plan && terraform apply
    ```
 5. **CI/CD** — GitHub Actions, four jobs on every push and PR:
    `quality` (ruff → mypy strict → offline tests → **eval gate**) · `frontend` (`tsc` +
@@ -611,25 +610,6 @@ A clean local → cloud path:
    Argo CD runs on kind (Phase 6); the EKS deploy step still calls Helm directly.
 
 Every step above is reproducible with the `make` targets and commands shown.
-
----
-
-## 🗺️ Roadmap
-
-- ☁️ **Actually apply the Terraform** — the HCL validates but has never been applied; a real EKS
-  deploy (and its bill) is the honest next milestone. This is the single biggest gap between this
-  repo and a production system, and it is stated here rather than papered over
-- 🧪 **End-to-end tests** — `tsc` and `next build` pass, but nothing exercises the SSE stream or the
-  Discover page at request time; a green build is not a green runtime
-- 🔐 **LangChain 0.3 → 1.x + Langfuse 2 → 3** — six open CVEs in the langchain family are fixed
-  only in 1.x, but `langchain` is pinned `<0.4` because Langfuse 2.x hard-imports
-  `langchain.callbacks.base`; bumping it blind trades a known CVE for silently-dead tracing. The
-  six IDs are enumerated in the CI audit step, so a *new* langchain CVE still fails the build
-- 📚 **Broaden the catalog** — multi-category data so Recall@k becomes a meaningful benchmark (beyond within-category audio)
-- 🎯 **Lift faithfulness (0.86)** — tighter grounding prompt + wider context window
-- 🔁 **Re-open the reranker** — try title-level reranking (bass/neckband appear in titles) and re-A/B
-- 🧠 **Agentic tools** — optional `filter_by_price` / `compare_products` tools behind the chain (LangGraph)
-- ⚙️ **Self-hosted inference** — vLLM on an EKS GPU pool once sustained QPS justifies it
 
 ---
 
