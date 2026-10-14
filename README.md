@@ -35,14 +35,14 @@ fill in below.
 The interesting part is that **retrieval is pluggable and ranking is not**. The same rating-aware
 ranker, cache, guardrails, and eval methodology sit behind both of these:
 
-| | **[A] Your catalog** | **[B] The live web** |
-|---|---|---|
-| **Endpoints** | `POST /recommend` · `POST /chat` (SSE) | `POST /aggregate` · `POST /aggregate/stream` (SSE) |
-| **Retrieval** | **Qdrant hybrid** — dense (OpenAI `text-embedding-3-small`) + sparse (BM25) over an indexed catalog | **SerpApi / Google Shopping** — one live search per cache miss |
-| **Relevance from** | semantic similarity score | source result `position` (Google already ordered by relevance) |
-| **Data** | `data/products.json` — a **9-product demo catalog**, deliberately small | whatever is live on Google Shopping right now |
-| **Binding constraint** | embedding cost at index time | **metered search quota** (250/month free) → global budget guard |
-| **Wired to the web UI?** | **No** — API + tests only | **Yes** — the dashboard's Discover page calls this |
+| | **The live web** |
+|---|---|
+| **Endpoints** | `POST /aggregate` · `POST /aggregate/stream` (SSE) |
+| **Retrieval** | **Qdrant hybrid** — dense (OpenAI `text-embedding-3-small`) + sparse (BM25) over an indexed catalog  **SerpApi / Google Shopping** — one live search per cache miss |
+| **Relevance from** | source result `position` (Google already ordered by relevance) |
+| **Data** | whatever is live on Google Shopping right now |
+| **Binding constraint** | **metered search quota** (250/month free) → global budget guard |
+| **Wired to the web UI?** | **Yes** — the dashboard's Discover page calls this |
 
 **What both backends share:** a ranking blend of
 `semantic/positional relevance × average rating × review-volume confidence` — so a 5★-from-2-reviews
@@ -69,7 +69,7 @@ injected text in a review or a listing **cannot add, remove, or reorder a recomm
 | 💸 **Global Spend Guard** | The live source is **metered** (250 searches/month free) — the binding constraint on the product, not compute. Per-user rate limits don't protect a **shared** budget: one user inside their own quota can drain everyone's month. Spend is therefore counted **globally in Redis** (day + month) and refused past the cap, with a 6h result cache so a repeat query costs **0 searches and 0 LLM calls** |
 | 🚨 **An Outage Is Not an Empty Result** | Any source failure (quota exhausted, bad key, network) used to return `no_match=true` — indistinguishable from "we genuinely found nothing", so **nobody could tell the product was broken**. Failures now return a distinct `source_unavailable` state with a reason and a `source_unavailable_total{reason}` counter — an **alertable** condition |
 | 📈 **Eval Gate That Can Fail the Build** | Two guards on every PR: NDCG@3/MRR must hold within tolerance of a frozen baseline, **and our ranking must still beat Google Shopping's own ordering** (ours **0.9413 / 1.0000** vs Google **0.8240 / 0.8750**). If guard 2 breaks, the re-ranker has stopped earning its place and CI goes red rather than shipping it. Runs on recorded fixtures — no services, no keys, no paid quota |
-| 🐳 **Deploy Path** | Multi-stage **non-root** Docker · 3-file compose mesh · **Helm** chart (kind → EKS) · **Terraform** (EKS / DynamoDB / ElastiCache / S3 / ECR / IRSA). Local Docker is verified end-to-end; **Helm and Terraform are validated but have never been applied to a live cluster** — see [Results](#-results-real-numbers-honest-scope) |
+| 🐳 **Deploy Path** | Multi-stage **non-root** Docker · 3-file compose mesh · **Helm** chart (kind → EKS) · **Terraform** (EKS / DynamoDB / ElastiCache / S3 / ECR / IRSA). Local Docker is verified end-to-end; **Helm and Terraform are validated but have never been applied to a live cluster** 
 
 ---
 
@@ -280,8 +280,7 @@ P2-Product-Recommendion-engine/            # uv workspace (monorepo)
 - **kind 0.32, kubectl, Helm 4** for the Kubernetes half (`KIND=0` skips it)
 - **GNU make**. Recipes are shell-neutral: PowerShell (cmd.exe) and Git Bash both work.
 - An **`OPENAI_API_KEY`** (embeddings for `make seed` and every query; LLM fallback rung) and a
-  **Clerk** app (sign-in). **`SERPAPI_API_KEY`** feeds the live aggregator the web UI calls: free
-  plan = 250 searches/month, every cache miss spends one, a day/month budget guard is on.
+  **Clerk** app (sign-in). **`SERPAPI_API_KEY`** feeds the live aggregator the web UI calls: every cache miss spends one, a day/month budget guard is on.
   `GROQ_API_KEY` (primary LLM) and `ANTHROPIC_API_KEY` (last rung) are optional.
 
 ### 1 · Install & configure
@@ -301,13 +300,13 @@ make verify       # call every component: PASS / WARN / FAIL each (LIVE=1 also p
 make down         # stop compose + kind nodes, keep all data   (make downv deletes it all)
 ```
 
-Nothing asks for a login: **Grafana** is anonymous with 4 dashboards in collapsible sections, **Langfuse** is
+**Grafana** is anonymous with 4 dashboards in collapsible sections, **Langfuse** is
 provisioned from `.env` and http://localhost:2008 opens signed in, **RedisInsight** has both Redis
 databases registered. Every LLM call is traced to Langfuse and counted in Prometheus
 (`llm_requests_total` by provider and status), so a dead provider key shows up on a dashboard and
 as the `LLMProviderFailing` alert, not as a silent fallback bill.
 
-**How to check every component yourself, by browser and by CLI:** [docs/VERIFY.md](docs/VERIFY.md).
+**How to check every component yourself, by browser and by CLI:**.
 
 ### 3 · Quality gate and evals
 ```bash
@@ -320,7 +319,7 @@ make eval-rag                    # answer quality (custom LLM judge; spends toke
 
 ### Service map
 
-`make urls` prints this with live status; `make service_ls` adds the logins.
+`make urls` prints this with live status;
 
 | Component | URL / connection |
 |---|---|
@@ -341,7 +340,7 @@ make eval-rag                    # answer quality (custom LLM judge; spends toke
 | 🪣 MinIO (Langfuse blobs) | http://localhost:2018 console · S3 API `2017` |
 | ☸️ **kind** | http://app.localhost · https://app.localhost (local CA) · `kubectl --context kind-p2 -n p2 get pods` |
 
-P2 itself keeps no data in Postgres (chats → DynamoDB, catalog → Qdrant, caches → Redis): the
+The
 only Postgres is Langfuse's. The LLMs are hosted (Groq → OpenAI → Anthropic); the only models on
 local CPU are fastembed's BM25 (hybrid search) and an optional cross-encoder reranker.
 
@@ -360,7 +359,7 @@ cd apps/web && npm install && npm run dev # web on :3000
 ## 🧰 Make Commands
 
 `make help` prints all of them, grouped by the Makefile's sections. The compose stack is three
-files under one Docker project (`p2-recommender`); tiers are picked by service name.
+files under one Docker project; tiers are picked by service name.
 
 ### Lifecycle
 
@@ -380,13 +379,12 @@ files under one Docker project (`p2-recommender`); tiers are picked by service n
 | Command | What it does |
 |---|---|
 | `make urls` | Every URL with an up/down mark. No credentials: safe to screen-share. |
-| `make service_ls` | Every component with its **local** logins. Provider API keys are never printed (set / missing only). |
 | `make verify` | Calls every component and prints PASS / WARN / FAIL (36 checks, read-only, a few seconds). `LIVE=1` adds one tiny call per LLM provider (~$0.0001). |
 | `make check` | The green gate: `lint` + `type` + `test`. |
 | `make env` · `make env-check` | Rewrite `.env` / `.env.example` from `ops/env/gen_env.py` (values kept) · fail if the example is stale. |
 | `make alerts-test` · `make helm-lint` | promtool rule tests (Docker) · lint + schema-check the chart for kind, DOKS, EKS. |
 
-### Kubernetes (kind)
+### Kubernetes (kind for Local Deployment testing)
 
 `up` runs **`kind-start`**: no cluster → create the **lean** one (no in-cluster Prometheus/Grafana;
 compose's monitoring covers compose) and deploy the current code; stopped → restart its nodes and
@@ -403,7 +401,6 @@ project's cluster.
 | `make kind-argocd` · `kind-gitops` | Hand the release to Argo CD · deploy through git. |
 | `make kind-smoke` | Smoke test through the Gateway (`AGGREGATE=1` spends one SerpApi search). |
 
-Details: [docs/runbook-kind.md](docs/runbook-kind.md).
 
 ---
 
@@ -411,15 +408,13 @@ Details: [docs/runbook-kind.md](docs/runbook-kind.md).
 
 `.env.example` is generated by `ops/env/gen_env.py` (`make env`): one boxed section per service,
 each holding everything that service needs: its port, URL, credentials and settings (Postgres
-user, password, database and port together, and so on). Values never carry trailing comments:
-python-dotenv reads `KEY=   # note` as the value `# note`. `make env` rewrites both files and keeps
-every value already in `.env` (backup in `.env.bak`).
+user, password, database and port together, and so on).
 
 **Two keys decide what works:**
 
 | Key | Needed for | If missing |
 |---|---|---|
-| `SERPAPI_API_KEY` | **[B] the live aggregator**: `/aggregate`, so the whole web UI | The UI returns `source_unavailable`. Free plan = 250 searches/month; every cache miss spends one. |
+| `SERPAPI_API_KEY` | **[B] the live aggregator**: `/aggregate`, so the whole web UI | The UI returns `source_unavailable`. |
 | `OPENAI_API_KEY` | **[A] the catalog path**: embeddings for indexing + retrieval; LLM fallback rung | `/recommend` and `/chat` can't embed. `/aggregate` still ranks, but writes no reasons unless Groq or Anthropic is set. |
 
 `GROQ_API_KEY` (primary, cheapest) and `ANTHROPIC_API_KEY` (last rung) are optional. A key that is
